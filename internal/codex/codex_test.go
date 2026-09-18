@@ -1,6 +1,8 @@
 package codex
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -71,5 +73,22 @@ func TestConvertSkipsEmpty(t *testing.T) {
 	}
 	if _, ok := Convert(strings.NewReader(`{"type":"session_meta","payload":{"id":"x"}}`), &summary); ok || summary.SkippedEmpty != 1 {
 		t.Error("rollout with no records should be skipped")
+	}
+}
+
+func TestLoadSkipsAutoReview(t *testing.T) {
+	root := t.TempDir()
+	review := strings.ReplaceAll(strings.ReplaceAll(rollout, "sess-1", "sess-2"), "gpt-5-codex", autoReviewModel)
+	for name, body := range map[string]string{"rollout-a.jsonl": rollout, "rollout-b.jsonl": review} {
+		if err := os.WriteFile(filepath.Join(root, name), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	sessions, summary, err := Load(root, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(sessions) != 1 || sessions[0].ID != "sess-1" || summary.SkippedReview != 1 {
+		t.Errorf("sessions = %d, skipped review = %d; want the person's session only", len(sessions), summary.SkippedReview)
 	}
 }

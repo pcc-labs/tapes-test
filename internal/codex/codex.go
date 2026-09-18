@@ -51,6 +51,7 @@ type Summary struct {
 	Resumed       int
 	SkippedNoMeta int
 	SkippedEmpty  int
+	SkippedReview int
 	BadLines      int
 }
 
@@ -65,6 +66,9 @@ func (s Summary) Render() string {
 	}
 	if s.SkippedEmpty > 0 {
 		parts = append(parts, fmt.Sprintf("%d skipped: no records", s.SkippedEmpty))
+	}
+	if s.SkippedReview > 0 {
+		parts = append(parts, fmt.Sprintf("%d skipped: Codex reviewing its own runs", s.SkippedReview))
 	}
 	if s.BadLines > 0 {
 		parts = append(parts, fmt.Sprintf("%d unparseable line(s) ignored", s.BadLines))
@@ -109,6 +113,12 @@ func Rollouts(root string, sinceDays int) ([]string, error) {
 	return out, err
 }
 
+// autoReviewModel marks Codex's approval reviewer: sessions of their own,
+// every prompt "The following is the Codex agent history…". They are the
+// harness talking to itself, and imported they crowd the person's work out
+// of search.
+const autoReviewModel = "codex-auto-review"
+
 // Load converts every rollout under root modified in the window. Sessions
 // come back in path order; a resumed session appears once, from its last
 // rollout.
@@ -128,6 +138,10 @@ func Load(root string, sinceDays int) ([]Session, Summary, error) {
 		session, ok := Convert(f, &summary)
 		f.Close()
 		if !ok {
+			continue
+		}
+		if session.Model == autoReviewModel {
+			summary.SkippedReview++
 			continue
 		}
 		if i, seen := index[session.ID]; seen {

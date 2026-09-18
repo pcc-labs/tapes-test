@@ -2,6 +2,7 @@
 //
 //	tapes-skill-report                  import, derive, write ./tapes-skills
 //	tapes-skill-report --since-days 90  a wider window
+//	tapes-skill-report --ollama         the same, with local models only
 //	tapes-skill-report sessions         what was imported
 //	tapes-skill-report search "query"   semantic search over the imported work
 //	tapes-skill-report suggest          show the clusters without generating
@@ -9,9 +10,9 @@
 //
 // Needs Docker and an OpenAI key (OPENAI_API_KEY, or a .env in the current
 // directory). Everything runs on this machine; the outbound calls are skill
-// generation and span embeddings, both to OpenAI. Re-running is safe: the
-// server dedups sessions already imported, and only new clusters produce
-// new skills.
+// generation and span embeddings, both to OpenAI, or to a local Ollama with
+// --ollama. Re-running is safe: the server dedups sessions already imported,
+// and only new clusters produce new skills.
 package main
 
 import (
@@ -40,18 +41,27 @@ commands:
   sessions   list imported sessions
   search     semantic search over imported sessions
   suggest    print the repeated-work clusters without generating skills
+  skill      write one skill from the sessions you name
   down       stop the stack and delete its data
 
 run flags:
   --since-days N   rollouts modified in the last N days (default 30; 0 = all)
   --out DIR        where <slug>/SKILL.md is written (default tapes-skills)
   --codex-root DIR Codex sessions tree (default ~/.codex/sessions)
+  --ollama         use a local Ollama instead of OpenAI: nothing leaves the
+                   machine, but skills are slower and rougher
 
 sessions flags:
   --limit N        rows to print (default 50; 0 = all)
 
 search flags:
   -k N             hits to return (default 5)
+  -q               print only session ids, one per line, best first
+
+skill flags:
+  --out DIR        where <slug>/SKILL.md is written (default tapes-skills)
+
+  tapes-skill-report skill $(tapes-skill-report search -q "how I fixed auth")
 `
 
 func main() {
@@ -73,6 +83,8 @@ func main() {
 		err = search(ctx, args)
 	case "suggest":
 		err = suggest(ctx, args)
+	case "skill":
+		err = skill(ctx, args)
 	case "down":
 		err = down(ctx)
 	case "help", "-h", "--help":
@@ -94,17 +106,18 @@ func run(ctx context.Context, args []string) error {
 	sinceDays := fs.Int("since-days", 30, "")
 	out := fs.String("out", "tapes-skills", "")
 	root := fs.String("codex-root", codex.DefaultRoot(), "")
+	ollama := fs.Bool("ollama", false, "")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	loadDotEnv()
-	if os.Getenv("OPENAI_API_KEY") == "" {
-		return errors.New("no OPENAI_API_KEY: export it, or put OPENAI_API_KEY=sk-... in ./.env")
+	if !*ollama && os.Getenv("OPENAI_API_KEY") == "" {
+		return errors.New("no OPENAI_API_KEY: export it, or put OPENAI_API_KEY=sk-... in ./.env (or pass --ollama to stay fully local)")
 	}
 	if _, err := os.Stat(*root); err != nil {
 		return fmt.Errorf("no Codex history at %s", *root)
 	}
-	st, err := stack.New()
+	st, err := stack.New(*ollama)
 	if err != nil {
 		return err
 	}
@@ -126,6 +139,21 @@ func run(ctx context.Context, args []string) error {
 	client := tapes.New(stack.API, stack.Ingest)
 	if err := waitFor(ctx, client.Ping, 90*time.Second); err != nil {
 		return fmt.Errorf("tapes did not come up; try: docker compose -f %s logs tapes", st.File())
+	}
+	if *ollama {
+		// Before the import, so the search cassette's first embedding call
+		// finds its model.
+		skillModel := os.Getenv("TAPES_SKILL_MODEL")
+		if skillModel == "" {
+			skillModel = stack.DefaultSkillModel
+		}
+		note("using Ollama in %s; the first run downloads the models (about 3 GB)", st.Ollama())
+		for _, model := range []string{stack.EmbeddingModel, skillModel} {
+			note("pulling %s", model)
+			if err := st.PullModel(ctx, model); err != nil {
+				return err
+			}
+		}
 	}
 
 	say("3/5 importing %d session(s)", len(sessions))
@@ -153,7 +181,7 @@ func run(ctx context.Context, args []string) error {
 
 	say("5/5 generating skills")
 	before := skillsWritten(*out)
-	written, covered, err := generate(ctx, client, *out)
+	written, covered, failed, err := generate(ctx, client, *out)
 	if err != nil {
 		return err
 	}
@@ -163,6 +191,11 @@ func run(ctx context.Context, args []string) error {
 	switch {
 	case written > 0:
 		say("skills are in ./%s", *out)
+	case failed > 0:
+		say("found %d group(s) of repeated work, but writing the skills failed (above)", failed)
+		if *ollama {
+			note("local models often run out the cassette's 30s budget; an OpenAI key is the reliable path")
+		}
 	case before > 0:
 		say("no new skills: the repeated work in the last %d day(s) is already covered by ./%s", *sinceDays, *out)
 	case covered > 0:
@@ -178,11 +211,12 @@ func run(ctx context.Context, args []string) error {
 }
 
 // generate detects clusters and writes a SKILL.md for each new one. It
-// returns how many it wrote and how many clusters an existing skill covers.
-func generate(ctx context.Context, client *tapes.Client, out string) (written, covered int, err error) {
+// returns how many it wrote, how many clusters an existing skill covers, and
+// how many the skills cassette failed on.
+func generate(ctx context.Context, client *tapes.Client, out string) (written, covered, failed int, err error) {
 	suggestions, byID, err := detect(ctx, client)
 	if err != nil {
-		return 0, 0, err
+		return 0, 0, 0, err
 	}
 	for _, s := range suggestions {
 		if s.Kind != "new" {
@@ -190,26 +224,70 @@ func generate(ctx context.Context, client *tapes.Client, out string) (written, c
 			continue
 		}
 		ids := s.SessionIDs[:min(3, len(s.SessionIDs))]
-		skill, err := client.GenerateSkill(ctx, ids)
-		if err != nil {
+		dest, err := writeSkill(ctx, client, out, ids)
+		var ge *generateError
+		if errors.As(err, &ge) {
 			note("generate failed for %q: %v", s.Title, err)
+			failed++
 			continue
 		}
-		markdown, err := client.SkillMarkdown(ctx, skill.ID)
 		if err != nil {
-			return written, covered, err
+			return written, covered, failed, err
 		}
-		dest := filepath.Join(out, skill.Slug, "SKILL.md")
-		if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
-			return written, covered, err
-		}
-		if err := os.WriteFile(dest, []byte(markdown), 0o644); err != nil {
-			return written, covered, err
-		}
-		note("wrote %s  (from %d sessions, e.g. %s)", dest, len(s.SessionIDs), byID[ids[0]].Title)
+		note("wrote %s  (from %d sessions, e.g. %s)", dest, len(s.SessionIDs), truncate(oneLine(byID[ids[0]].Title), 60))
 		written++
 	}
-	return written, covered, nil
+	return written, covered, failed, nil
+}
+
+// generateError is the skills cassette declining or failing to write a
+// skill, as opposed to the file not landing on disk.
+type generateError struct{ err error }
+
+func (e *generateError) Error() string { return e.err.Error() }
+func (e *generateError) Unwrap() error { return e.err }
+
+// writeSkill generates one skill from the given sessions and writes it to
+// <out>/<slug>/SKILL.md, returning that path.
+func writeSkill(ctx context.Context, client *tapes.Client, out string, ids []string) (string, error) {
+	skill, err := client.GenerateSkill(ctx, ids)
+	if err != nil {
+		return "", &generateError{err}
+	}
+	markdown, err := client.SkillMarkdown(ctx, skill.ID)
+	if err != nil {
+		return "", err
+	}
+	dest := filepath.Join(out, skill.Slug, "SKILL.md")
+	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
+		return "", err
+	}
+	if err := os.WriteFile(dest, []byte(markdown), 0o644); err != nil {
+		return "", err
+	}
+	return dest, nil
+}
+
+// skill writes one skill from sessions the user picked, usually the ids
+// `search -q` printed.
+func skill(ctx context.Context, args []string) error {
+	fs := flag.NewFlagSet("skill", flag.ContinueOnError)
+	out := fs.String("out", "tapes-skills", "")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	ids := fs.Args()
+	if len(ids) == 0 {
+		return errors.New("skill needs session ids: tapes-skill-report skill $(tapes-skill-report search -q \"query\")")
+	}
+	client := tapes.New(stack.API, stack.Ingest)
+	note("generating one skill from %d session(s)", len(ids))
+	dest, err := writeSkill(ctx, client, *out, ids)
+	if err != nil {
+		return fmt.Errorf("generate failed (is the stack up?): %w", err)
+	}
+	fmt.Println(dest)
+	return nil
 }
 
 // detect reads every derived session from the API and runs the detector.
@@ -349,7 +427,7 @@ func sessions(ctx context.Context, args []string) error {
 			r.StartedAt.Local().Format("2006-01-02"),
 			r.Rollup.TurnCount,
 			truncate(filepath.Base(r.Cwd), 20),
-			truncate(r.DisplayTitle, 48),
+			truncate(oneLine(r.DisplayTitle), 48),
 			r.ID)
 	}
 	return nil
@@ -358,6 +436,7 @@ func sessions(ctx context.Context, args []string) error {
 func search(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("search", flag.ContinueOnError)
 	top := fs.Int("k", 5, "")
+	quiet := fs.Bool("q", false, "")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -366,15 +445,48 @@ func search(ctx context.Context, args []string) error {
 		return errors.New("search needs a query")
 	}
 	client := tapes.New(stack.API, stack.Ingest)
-	hits, err := client.Search(ctx, query, *top)
+	// Ask for twice as many: a harness session filed under two ids returns
+	// every hit twice, and the duplicates are dropped below.
+	hits, err := client.Search(ctx, query, *top*2)
 	if err != nil {
 		return fmt.Errorf("search failed (is the stack up?): %w", err)
 	}
 	if len(hits) == 0 {
-		fmt.Println("no hits; embeddings run in the background after import, so try again in a minute")
+		fmt.Fprintln(os.Stderr, "no hits; embeddings run in the background after import, so try again in a minute")
+		return nil
+	}
+	// One entry per harness session, whatever it was filed under.
+	harness := map[string]string{}
+	if rows, err := client.Sessions(ctx, 0); err == nil {
+		for _, r := range rows {
+			if r.HarnessSessionID != "" {
+				harness[r.ID] = r.HarnessSessionID
+			}
+		}
+	}
+	key := func(h tapes.Hit) string {
+		if k := harness[h.SessionID]; k != "" {
+			return k
+		}
+		return h.SessionID
+	}
+	seen := map[string]bool{}
+	if *quiet {
+		// The shape `skill` takes, so the two compose through $(...).
+		for _, h := range hits {
+			if len(seen) < *top && !seen[key(h)] {
+				seen[key(h)] = true
+				fmt.Println(h.SessionID)
+			}
+		}
 		return nil
 	}
 	for _, h := range hits {
+		turn := key(h) + "\x00" + h.UserPrompt + "\x00" + h.Snippet
+		if len(seen) == *top || seen[turn] {
+			continue
+		}
+		seen[turn] = true
 		fmt.Printf("%.2f  %s  %s\n", h.Score, h.StartedAt.Local().Format("2006-01-02"), h.SessionID)
 		p, s := oneLine(h.UserPrompt), oneLine(h.Snippet)
 		if p != "" {
@@ -388,7 +500,7 @@ func search(ctx context.Context, args []string) error {
 }
 
 func down(ctx context.Context) error {
-	st, err := stack.New()
+	st, err := stack.New(false)
 	if err != nil {
 		return err
 	}

@@ -1,0 +1,34 @@
+# Layered over compose.yaml by `--ollama`: both cassettes talk to Ollama
+# instead of OpenAI, so nothing leaves the machine.
+#
+# TAPES_OLLAMA_URL is the host's own Ollama when one is running (on a Mac
+# that is the only one with the GPU). Otherwise the tool turns on the
+# ollama-container profile and the URL falls back to the container below,
+# which shares ~/.ollama so models survive `down`.
+services:
+  ollama:
+    image: ollama/ollama
+    profiles: [ollama-container]
+    volumes:
+      - ~/.ollama:/root/.ollama
+
+  skills:
+    environment:
+      CASSETTE_LLM_PROVIDER: ollama
+      CASSETTE_LLM_BASE_URL: ${TAPES_OLLAMA_URL:-http://ollama:11434}
+      CASSETTE_LLM_API_KEY: ""
+      CASSETTE_LLM_MODEL: ${TAPES_SKILL_MODEL:-llama3.2}
+      # The cassette gives each model call 30s. A local model reads a full
+      # transcript slower than that, so it gets the start of each session.
+      CASSETTE_GENERATION_MAX_TRANSCRIPT_BYTES: "8192"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  search:
+    environment:
+      CASSETTE_EMBEDDING_PROVIDER: ollama
+      CASSETTE_EMBEDDING_TARGET: ${TAPES_OLLAMA_URL:-http://ollama:11434}
+      CASSETTE_EMBEDDING_MODEL: embeddinggemma
+      CASSETTE_EMBEDDING_API_KEY: ""
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
