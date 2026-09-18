@@ -1,4 +1,4 @@
-module github.com/pcc-labs/tapes-skill-report
+module github.com/pcc-labs/tapes-test
 
 go 1.24
 

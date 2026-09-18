@@ -59,7 +59,7 @@ func New(ollama bool) (*Stack, error) {
 	if err != nil {
 		dir = os.TempDir()
 	}
-	dir = filepath.Join(dir, "tapes-skill-report")
+	dir = filepath.Join(dir, "tapes-skills-demo")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, err
 	}
@@ -104,7 +104,7 @@ func Preflight() error {
 func explain(output string) string {
 	switch {
 	case strings.Contains(output, "port is already allocated"), strings.Contains(output, "address already in use"):
-		return "ports 18081/18082 are taken by something else. If it is an old copy of this stack, run `tapes-skill-report down`; otherwise stop whatever is listening there"
+		return "ports 18081/18082 are taken by something else. If it is an old copy of this stack, run `tapes-skills-demo down`; otherwise stop whatever is listening there"
 	case strings.Contains(output, "authorization token has expired"), strings.Contains(output, "public.ecr.aws") && strings.Contains(output, "denied"):
 		return "Docker has a stale login for public.ecr.aws. Run `docker logout public.ecr.aws` and try again"
 	case strings.Contains(output, "no space left on device"):
@@ -122,7 +122,7 @@ func OllamaMode() bool {
 	if err != nil {
 		return false
 	}
-	mode, err := os.ReadFile(filepath.Join(dir, "tapes-skill-report", "mode"))
+	mode, err := os.ReadFile(filepath.Join(dir, "tapes-skills-demo", "mode"))
 	return err == nil && strings.TrimSpace(string(mode)) == "ollama"
 }
 
@@ -193,7 +193,7 @@ func (s *Stack) Up(ctx context.Context) error {
 		prev = []byte("openai") // a stack from before --ollama existed
 	}
 	if len(prev) > 0 && string(prev) != s.mode() {
-		return fmt.Errorf("this stack was built with %s; run `tapes-skill-report down` before switching to %s", prev, s.mode())
+		return fmt.Errorf("this stack was built with %s; run `tapes-skills-demo down` before switching to %s", prev, s.mode())
 	}
 	cmd := s.cmd(ctx, "up", "-d", "--quiet-pull")
 	var buf bytes.Buffer

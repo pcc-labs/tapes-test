@@ -14,8 +14,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pcc-labs/tapes-skill-report/internal/codex"
-	"github.com/pcc-labs/tapes-skill-report/internal/stack"
+	"github.com/pcc-labs/tapes-test/internal/codex"
+	"github.com/pcc-labs/tapes-test/internal/stack"
 )
 
 // The skills cassette writes a skill from whole sessions, so what it

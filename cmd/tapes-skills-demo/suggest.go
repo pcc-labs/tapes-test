@@ -14,10 +14,10 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/pcc-labs/tapes-skill-report/internal/codex"
-	"github.com/pcc-labs/tapes-skill-report/internal/recommend"
-	"github.com/pcc-labs/tapes-skill-report/internal/stack"
-	"github.com/pcc-labs/tapes-skill-report/internal/tapes"
+	"github.com/pcc-labs/tapes-test/internal/codex"
+	"github.com/pcc-labs/tapes-test/internal/recommend"
+	"github.com/pcc-labs/tapes-test/internal/stack"
+	"github.com/pcc-labs/tapes-test/internal/tapes"
 )
 
 // corpus is everything derived about the imported sessions: the detector's
@@ -38,7 +38,7 @@ type corpus struct {
 func detect(ctx context.Context, client *tapes.Client, fb codex.Feedback) (*corpus, error) {
 	rows, err := client.Sessions(ctx, 0)
 	if err != nil {
-		return nil, fmt.Errorf("cannot read %s (is the stack up? run tapes-skill-report first): %w", client.API, err)
+		return nil, fmt.Errorf("cannot read %s (is the stack up? run tapes-skills-demo first): %w", client.API, err)
 	}
 	var picked []tapes.Session
 	seen := map[string]bool{} // one entry per harness session, whatever it was filed under
@@ -229,8 +229,8 @@ func (c *corpus) show(w io.Writer, ui *palette, sinceDays int) {
 		fmt.Fprintf(w, "\n   %s\n", ui.strong.Render("Nothing repeated enough to be worth a skill."))
 		fmt.Fprintf(w, "   %s\n", ui.dim.Render("A suggestion needs three or more sessions doing the same kind of work; --since-days 90 widens the window."))
 		fmt.Fprintf(w, "\n   %s\n", ui.strong.Render("Make one from work you remember instead:"))
-		fmt.Fprintf(w, "   %s\n", `tapes-skill-report search "how I fixed auth"`)
-		fmt.Fprintf(w, "   %s\n", `tapes-skill-report skill $(tapes-skill-report search -q "how I fixed auth")`)
+		fmt.Fprintf(w, "   %s\n", `tapes-skills-demo search "how I fixed auth"`)
+		fmt.Fprintf(w, "   %s\n", `tapes-skills-demo skill $(tapes-skills-demo search -q "how I fixed auth")`)
 		return
 	}
 	c.showFeedback(w, ui)
@@ -407,7 +407,7 @@ func (c *corpus) pick(yes bool) ([]int, error) {
 		return all, nil
 	}
 	if fi, err := os.Stdin.Stat(); err != nil || fi.Mode()&os.ModeCharDevice == 0 {
-		note("no terminal to ask on, so writing all %d; pass numbers to `tapes-skill-report skill` to pick later", len(all))
+		note("no terminal to ask on, so writing all %d; pass numbers to `tapes-skills-demo skill` to pick later", len(all))
 		return all, nil
 	}
 	fmt.Fprintf(os.Stderr, "\n   Write which? %s ", noteText.Render("[Enter = all, numbers like 1,3, or none]"))
@@ -487,7 +487,7 @@ func suggest(ctx context.Context, args []string) error {
 	}
 	c.show(os.Stdout, outUI, *sinceDays)
 	if n := c.firstNew(); n > 0 {
-		fmt.Printf("\n   %s\n", outUI.dim.Render(fmt.Sprintf("write one:  tapes-skill-report skill %d", n)))
+		fmt.Printf("\n   %s\n", outUI.dim.Render(fmt.Sprintf("write one:  tapes-skills-demo skill %d", n)))
 	}
 	return nil
 }
@@ -504,7 +504,7 @@ func skill(ctx context.Context, args []string) error {
 	}
 	loadDotEnv()
 	if len(fs.Args()) == 0 {
-		return errors.New("skill needs suggestion numbers from `tapes-skill-report suggest`, or session ids: tapes-skill-report skill $(tapes-skill-report search -q \"query\")")
+		return errors.New("skill needs suggestion numbers from `tapes-skills-demo suggest`, or session ids: tapes-skills-demo skill $(tapes-skills-demo search -q \"query\")")
 	}
 	client := tapes.New(stack.API, stack.Ingest)
 	if _, err := strconv.Atoi(fs.Args()[0]); err == nil {

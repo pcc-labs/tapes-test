@@ -1,12 +1,12 @@
 #!/bin/sh
-# Installs the latest tapes-skill-report release. No Go needed.
+# Installs the latest tapes-skills-demo release. No Go needed.
 #
-#   curl -fsSL https://raw.githubusercontent.com/pcc-labs/tapes-skill-report/main/install.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/pcc-labs/tapes-test/main/install.sh | sh
 #
 # TAPES_INSTALL_DIR picks the directory (default ~/.local/bin).
 set -eu
 
-repo="pcc-labs/tapes-skill-report"
+repo="pcc-labs/tapes-test"
 os=$(uname -s | tr '[:upper:]' '[:lower:]')
 arch=$(uname -m)
 case "$arch" in
@@ -19,7 +19,7 @@ case "$os" in
   *) echo "install: unsupported OS: $os (macOS and Linux only; on Windows use WSL)" >&2; exit 1 ;;
 esac
 
-name="tapes-skill-report-$os-$arch"
+name="tapes-skills-demo-$os-$arch"
 url="https://github.com/$repo/releases/latest/download/$name"
 dir="${TAPES_INSTALL_DIR:-$HOME/.local/bin}"
 tmp=$(mktemp -d)
@@ -35,15 +35,15 @@ else
 fi
 
 mkdir -p "$dir"
-mv "$tmp/$name" "$dir/tapes-skill-report"
-chmod +x "$dir/tapes-skill-report"
-echo "installed $dir/tapes-skill-report"
+mv "$tmp/$name" "$dir/tapes-skills-demo"
+chmod +x "$dir/tapes-skills-demo"
+echo "installed $dir/tapes-skills-demo"
 
 case ":$PATH:" in
-  *":$dir:"*) echo "next: tapes-skill-report check" ;;
+  *":$dir:"*) echo "next: tapes-skills-demo check" ;;
   *)
     echo "$dir is not on your PATH. Add it, then open a new terminal:"
     echo "  echo 'export PATH=\"$dir:\$PATH\"' >> ~/.zshrc"
-    echo "or run it by its full path: $dir/tapes-skill-report check"
+    echo "or run it by its full path: $dir/tapes-skills-demo check"
     ;;
 esac

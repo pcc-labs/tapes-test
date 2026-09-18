@@ -1,51 +1,78 @@
-# Skills from your Codex history
+# tapes test
 
-Reads your last 30 days of Codex sessions, finds work you repeated, and
-writes a `SKILL.md` for each. Then you can search those sessions by meaning
-and turn any few of them into a skill. Needs Docker and an OpenAI key.
+One command on your laptop, and your own agent history tells you something:
+what you keep correcting, what you keep repeating, and a skill written from
+it. Nothing leaves the machine except the one model call that writes the
+skill.
+
+Codex today. Needs Docker and an OpenAI key.
 
 ## Setup
 
 Start Docker Desktop, then:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/pcc-labs/tapes-skill-report/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/pcc-labs/tapes-test/main/install.sh | sh
 export OPENAI_API_KEY=sk-...   # or put it in a .env in the current directory
-tapes-skill-report check
+tapes-skills-demo check
 ```
 
 `check` says whether a run would work and what to fix if not: Docker
 running, the key accepted, Codex history found. With Go installed,
-`go install github.com/pcc-labs/tapes-skill-report@latest` works too.
+`go install github.com/pcc-labs/tapes-test/cmd/tapes-skills-demo@latest`
+works too.
 
 ## Run
 
 ```bash
-tapes-skill-report
+tapes-skills-demo
 ```
 
-Takes a few minutes; your longest session sets the pace. It ends with what
-your sessions look like and the skills they could become, and asks which to
-write. Skills land in `tapes-skills/`; copy the ones you want into
-`.claude/skills/`. If it is interrupted, run it again: it picks up where it
-stopped.
+It reads your last 30 days of Codex sessions, imports them into a local
+tapes stack, and ends with what your sessions look like. Takes a few
+minutes; your longest session sets the pace. If it is interrupted, run it
+again: it picks up where it stopped.
 
-If you review UI with Codex's browser comments, they come first: how many
-you left, on which pages, the latest in your words, and a skill of the rules
-they keep restating ("too much orange. we can use grays and other shades
-here"). That skill is written from the comments themselves, not from the
-sessions around them.
+### The feedback you keep giving
 
-```bash
-tapes-skill-report suggest    # show it again without writing anything
-tapes-skill-report skill 1    # write suggestion 1
+If you review UI with Codex's browser comments, they come first:
+
+```
+Browser comments
+114 comments in 18 of your 37 sessions; 13 of them were mostly comments.
+
+console.papercompute.com  81  / 55 · /skills 11 · /skills/:id 7
+contributor.info          16  /i/open-source-repos 9 · /i/open-source-repos/issues 2
+
+In your words, latest first:
+Sep 17  /skills   left align the dismiss
+Sep 17  /skills   new vs evaluate look the same. is there a way visually to distinguish?
+Sep 17  /skills   too much orange. we can use grays and other shades here.
 ```
 
-## Search, then make a skill from what you find
+Those comments become suggestion 1, a skill of the rules they keep
+restating, each rule quoting the comments behind it. It is written from the
+comments themselves, not from the sessions around them, which is why it
+reads like your review rather than like a summary of your week.
+
+### The work you keep repeating
+
+Under that, sessions that did the same kind of work, and work a skill you
+already have covers. You pick which to write; Enter takes them all.
 
 ```bash
-tapes-skill-report search "how I fixed auth"
-tapes-skill-report skill $(tapes-skill-report search -q "how I fixed auth")
+tapes-skills-demo suggest    # show it again without writing anything
+tapes-skills-demo skill 1    # write suggestion 1
+```
+
+Skills land in `tapes-skills/`. Copy the ones you want into `.claude/skills/`
+or paste them wherever you keep skills. Nothing is installed for you.
+
+### Anything you remember
+
+```bash
+tapes-skills-demo search "how I fixed auth"
+tapes-skills-demo skill $(tapes-skills-demo search -q "how I fixed auth")
 ```
 
 `search` ranks single turns across every imported session. `-q` prints only
@@ -56,24 +83,24 @@ focused sessions make better skills than one long thread.
 Search fills in the background. Right after the first run, give it a minute.
 
 ```bash
-tapes-skill-report sessions   # what was imported
+tapes-skills-demo sessions   # what was imported
 ```
 
 ## Or hand it to your agent
 
 Paste this into Codex or Claude Code:
 
-> Install and run tapes-skill-report for me.
-> 1. `curl -fsSL https://raw.githubusercontent.com/pcc-labs/tapes-skill-report/main/install.sh | sh`
-> 2. Run `tapes-skill-report check`. If any line says FAIL, stop and tell
+> Install and run tapes-skills-demo for me.
+> 1. `curl -fsSL https://raw.githubusercontent.com/pcc-labs/tapes-test/main/install.sh | sh`
+> 2. Run `tapes-skills-demo check`. If any line says FAIL, stop and tell
 >    me what it says; do not work around it.
-> 3. Run `tapes-skill-report`. It takes several minutes and prints progress
+> 3. Run `tapes-skills-demo`. It takes several minutes and prints progress
 >    to stderr; do not time it out.
 > 4. Read every `tapes-skills/*/SKILL.md` and tell me which are worth
 >    keeping and why.
-> 5. Run `tapes-skill-report sessions`, pick two kinds of work I did more
+> 5. Run `tapes-skills-demo sessions`, pick two kinds of work I did more
 >    than once, and for each run
->    `tapes-skill-report skill $(tapes-skill-report search -q "<that work>")`.
+>    `tapes-skills-demo skill $(tapes-skills-demo search -q "<that work>")`.
 > 6. Do not copy anything into my skills directory until I say so.
 
 Every command exits non-zero with a one-line reason when it fails. Results
@@ -88,21 +115,22 @@ Every failure prints one line saying what to do. The ones a first run meets:
 | `docker is installed but not running` | Start Docker Desktop and wait for it to finish starting. |
 | `OpenAI rejected OPENAI_API_KEY` | Fix the key. One exported in the shell wins over `.env`. |
 | `no Codex history at …` | Pass `--codex-root DIR`. `CODEX_HOME` is honoured. |
-| `ports 18081/18082 are taken` | `tapes-skill-report down`, or stop what is listening there. |
+| `ports 18081/18082 are taken` | `tapes-skills-demo down`, or stop what is listening there. |
 | `stale login for public.ecr.aws` | `docker logout public.ecr.aws` |
 | `command not found` after installing | The installer printed the PATH line to add. Open a new terminal after adding it. |
 | `no hits` from `search` | Embeddings fill in the background. Wait a minute. |
 | `lost contact with the tapes database` | Check Docker is still running, then run it again. |
 
-Anything else: `tapes-skill-report down` and run it again. That only deletes
+Anything else: `tapes-skills-demo down` and run it again. That only deletes
 this tool's containers and data, never your Codex history.
 
 ## Options
 
 ```bash
-tapes-skill-report --since-days 90   # default 30
-tapes-skill-report --out DIR         # default tapes-skills
-tapes-skill-report down              # remove containers and data
+tapes-skills-demo --since-days 90   # default 30
+tapes-skills-demo --out DIR         # default tapes-skills
+tapes-skills-demo --yes             # write every suggestion without asking
+tapes-skills-demo down              # remove containers and data
 ```
 
 Safe to re-run.
@@ -110,11 +138,11 @@ Safe to re-run.
 ## Without OpenAI
 
 ```bash
-tapes-skill-report --ollama
+tapes-skills-demo --ollama
 ```
 
-Nothing leaves your laptop. It uses the Ollama already running on your
-machine, or starts one in Docker if there is none, and downloads
+Nothing leaves your laptop at all. It uses the Ollama already running on
+your machine, or starts one in Docker if there is none, and downloads
 `embeddinggemma` and `llama3.2` (about 3 GB) the first time.
 
 The OpenAI key is the better experience. A local model gets 30 seconds and
@@ -124,7 +152,7 @@ runs it fast enough. On a Mac, install Ollama itself: the Docker one has no
 GPU.
 
 One stack uses one provider, because the two embed differently. To switch,
-run `tapes-skill-report down` first.
+run `tapes-skills-demo down` first.
 
 ## Privacy
 
@@ -137,6 +165,6 @@ stays on your laptop. With `--ollama`, all of it does.
 The same stack as the [tapes Docker Compose guide](https://tapes.dev/docs/guides/docker-compose/):
 postgres, tapes with four derive workers, and the skills and search
 cassettes. The compose file ships inside the binary, so there is nothing to
-clone, and its images are pinned to the versions this build was tested with. The API is on
-`127.0.0.1:18081`, and `tapesctl --api-url http://127.0.0.1:18081` works
-against it.
+clone, and its images are pinned to the versions this build was tested with.
+The API is on `127.0.0.1:18081`, and
+`tapesctl --api-url http://127.0.0.1:18081` works against it.

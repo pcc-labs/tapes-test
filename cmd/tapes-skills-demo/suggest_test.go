@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pcc-labs/tapes-skill-report/internal/recommend"
-	"github.com/pcc-labs/tapes-skill-report/internal/tapes"
+	"github.com/pcc-labs/tapes-test/internal/recommend"
+	"github.com/pcc-labs/tapes-test/internal/tapes"
 )
 
 func trace(prompt string) tapes.Trace {

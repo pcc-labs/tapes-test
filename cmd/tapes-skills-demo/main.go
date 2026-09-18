@@ -1,12 +1,12 @@
-// tapes-skill-report turns a month of Codex history into recommended skills.
+// tapes-skills-demo turns a month of Codex history into recommended skills.
 //
-//	tapes-skill-report                  import, derive, write ./tapes-skills
-//	tapes-skill-report --since-days 90  a wider window
-//	tapes-skill-report --ollama         the same, with local models only
-//	tapes-skill-report sessions         what was imported
-//	tapes-skill-report search "query"   semantic search over the imported work
-//	tapes-skill-report suggest          show the clusters without generating
-//	tapes-skill-report down             stop the stack and delete its data
+//	tapes-skills-demo                  import, derive, write ./tapes-skills
+//	tapes-skills-demo --since-days 90  a wider window
+//	tapes-skills-demo --ollama         the same, with local models only
+//	tapes-skills-demo sessions         what was imported
+//	tapes-skills-demo search "query"   semantic search over the imported work
+//	tapes-skills-demo suggest          show the clusters without generating
+//	tapes-skills-demo down             stop the stack and delete its data
 //
 // Needs Docker and an OpenAI key (OPENAI_API_KEY, or a .env in the current
 // directory). Everything runs on this machine; the outbound calls are skill
@@ -30,12 +30,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pcc-labs/tapes-skill-report/internal/codex"
-	"github.com/pcc-labs/tapes-skill-report/internal/stack"
-	"github.com/pcc-labs/tapes-skill-report/internal/tapes"
+	"github.com/pcc-labs/tapes-test/internal/codex"
+	"github.com/pcc-labs/tapes-test/internal/stack"
+	"github.com/pcc-labs/tapes-test/internal/tapes"
 )
 
-const usage = `usage: tapes-skill-report [command] [flags]
+const usage = `usage: tapes-skills-demo [command] [flags]
 
 commands:
   run        import Codex history, derive it, write skills (default)
@@ -72,8 +72,8 @@ skill flags:
   --out DIR        where <slug>/SKILL.md is written (default tapes-skills)
   --since-days N   the window the suggestion numbers came from (default 30)
 
-  tapes-skill-report skill 1 3
-  tapes-skill-report skill $(tapes-skill-report search -q "how I fixed auth")
+  tapes-skills-demo skill 1 3
+  tapes-skills-demo skill $(tapes-skills-demo search -q "how I fixed auth")
 `
 
 // version is set by the release build.
@@ -222,7 +222,7 @@ func run(ctx context.Context, args []string) error {
 	}
 	if len(chosen) == 0 {
 		if len(c.suggestions) > 0 {
-			note("nothing written; `tapes-skill-report skill N` writes one later")
+			note("nothing written; `tapes-skills-demo skill N` writes one later")
 		}
 	} else {
 		say("writing %d skill(s)", len(chosen))
@@ -246,9 +246,9 @@ func run(ctx context.Context, args []string) error {
 			}
 		}
 	}
-	note("browse what was imported:  tapes-skill-report sessions")
-	note("search it:                 tapes-skill-report search \"how did I fix auth\"")
-	note("stack is up at %s; `tapes-skill-report down` removes it and its data", stack.API)
+	note("browse what was imported:  tapes-skills-demo sessions")
+	note("search it:                 tapes-skills-demo search \"how did I fix auth\"")
+	note("stack is up at %s; `tapes-skills-demo down` removes it and its data", stack.API)
 	return nil
 }
 
@@ -365,12 +365,12 @@ func check(ctx context.Context, args []string) error {
 	if client.Ping(ctx) {
 		report("stack", nil, "already up at "+stack.API)
 	} else {
-		report("stack", nil, "not started yet; `tapes-skill-report` starts it")
+		report("stack", nil, "not started yet; `tapes-skills-demo` starts it")
 	}
 	if failed > 0 {
-		return fmt.Errorf("%d check(s) failed; fix those and run `tapes-skill-report check` again", failed)
+		return fmt.Errorf("%d check(s) failed; fix those and run `tapes-skills-demo check` again", failed)
 	}
-	fmt.Println(outUI.okTag.Render("ready:") + " run `tapes-skill-report`")
+	fmt.Println(outUI.okTag.Render("ready:") + " run `tapes-skills-demo`")
 	return nil
 }
 
@@ -383,7 +383,7 @@ func sessions(ctx context.Context, args []string) error {
 	client := tapes.New(stack.API, stack.Ingest)
 	rows, err := client.Sessions(ctx, 0)
 	if err != nil {
-		return fmt.Errorf("cannot read %s (is the stack up? run tapes-skill-report first): %w", client.API, err)
+		return fmt.Errorf("cannot read %s (is the stack up? run tapes-skills-demo first): %w", client.API, err)
 	}
 	if len(rows) == 0 {
 		fmt.Println("no sessions imported yet")
@@ -554,7 +554,7 @@ func waitForQueue(ctx context.Context, st *stack.Stack) error {
 		case err != nil:
 			failures++
 			if failures == maxFailures {
-				return fmt.Errorf("lost contact with the tapes database (%v). Is Docker still running? Nothing is lost: run `tapes-skill-report` again and it picks up where it stopped", err)
+				return fmt.Errorf("lost contact with the tapes database (%v). Is Docker still running? Nothing is lost: run `tapes-skills-demo` again and it picks up where it stopped", err)
 			}
 			n = last
 		default:
