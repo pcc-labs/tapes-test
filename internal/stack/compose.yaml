@@ -1,11 +1,11 @@
-# Local tapes for a one-person skill report (PCC-1415). Three containers:
-# postgres, tapes, and the skills cassette. No Ollama, no search or export
-# cassettes: this stack only imports history and generates skills, and the
-# generation call goes to OpenAI with the key exported as OPENAI_API_KEY.
-# Nothing else leaves the machine. `run.sh` next to this file drives it.
+# Local tapes for a one-person skill report. Four containers: postgres,
+# tapes, the skills cassette, and the search cassette. No Ollama: skill
+# generation and span embeddings both go to OpenAI with the key exported as
+# OPENAI_API_KEY. Nothing else leaves the machine.
 #
-# Host ports: 18081 tapes API, 18082 tapes ingest, 19999 skills cassette.
-# Postgres is not published; run.sh reads it through `docker compose exec`.
+# Host ports: 18081 tapes API, 18082 tapes ingest. Postgres and the cassettes
+# are not published; the tool reads postgres through `docker compose exec`
+# and the cassettes through the API.
 name: tapes-local-report
 
 services:
@@ -31,8 +31,20 @@ services:
       CASSETTE_LLM_API_KEY: ${OPENAI_API_KEY:-}
       CASSETTE_LLM_MODEL: ${TAPES_SKILL_MODEL:-gpt-4o-mini}
       TAPES_DATABASE_URL: postgres://tapes:tapes@postgres:5432/tapes?sslmode=disable
-    ports:
-      - "127.0.0.1:19999:9998"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  search:
+    image: public.ecr.aws/g4e5l3z3/papercomputeco/search-cassette:latest
+    environment:
+      CASSETTE_EMBEDDING_PROVIDER: openai
+      CASSETTE_EMBEDDING_TARGET: https://api.openai.com
+      CASSETTE_EMBEDDING_MODEL: text-embedding-3-large
+      CASSETTE_EMBEDDING_DIMENSIONS: "768"
+      CASSETTE_EMBEDDING_API_KEY: ${OPENAI_API_KEY:-}
+      CASSETTE_WAIT_FOR_DB: "true"
+      TAPES_DATABASE_URL: postgres://tapes:tapes@postgres:5432/tapes?sslmode=disable
     depends_on:
       postgres:
         condition: service_healthy
@@ -40,13 +52,13 @@ services:
   tapes:
     image: public.ecr.aws/g4e5l3z3/papercomputeco/tapes:latest
     # The proxy's upstream is unused here (history is imported, not captured
-    # live), but serve wants one; OpenAI keeps the stack free of Ollama.
+    # live), but serve wants one.
     command: >-
       serve
       --provider openai
       --upstream https://api.openai.com
       --postgres postgres://tapes:tapes@postgres:5432/tapes?sslmode=disable
-      --cassettes http://skills:9998/openapi
+      --cassettes http://skills:9998/openapi,http://search:9998/openapi
       --cassette-refresh 10s
     ports:
       - "127.0.0.1:18081:8081"
@@ -61,6 +73,8 @@ services:
       postgres:
         condition: service_healthy
       skills:
+        condition: service_started
+      search:
         condition: service_started
 
 volumes:

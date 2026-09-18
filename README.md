@@ -1,44 +1,44 @@
 # Skills from your Codex history
 
+Reads your last 30 days of Codex sessions, finds work you repeated, and
+writes a `SKILL.md` for each. Needs Docker and an OpenAI key.
+
 ## Setup
 
 ```bash
-curl -sSfL https://download.tapes.dev/tapesctl/install | bash
-git clone git@github.com:pcc-labs/tapes-skill-report.git
-cd tapes-skill-report
-cp .env.example .env     # add your OpenAI key
+go install github.com/pcc-labs/tapes-skill-report@latest
+export OPENAI_API_KEY=sk-...   # or put it in a .env in the current directory
 ```
-
-Needs Docker Desktop and Python 3.
 
 ## Run
 
 ```bash
-./run.sh
+tapes-skill-report
 ```
 
-Reads the last 30 days of Codex sessions, finds repeated work, writes a
-`SKILL.md` for each. Takes a few minutes. If nothing repeated enough, it says so.
+Takes a few minutes. Skills land in `tapes-skills/`; copy the ones you want
+into `.claude/skills/`. If nothing repeated enough, it says so.
 
-## Get the skills
+## Look around
 
 ```bash
-ls tapes-skills/
+tapes-skill-report sessions                 # what was imported
+tapes-skill-report search "how I fixed auth"  # semantic search over it
+tapes-skill-report suggest                  # the clusters, without generating
 ```
-
-Copy what you want into `.claude/skills/`.
 
 ## Options
 
 ```bash
-./run.sh --since-days 90   # default 30
-./run.sh --out DIR         # default tapes-skills
-./run.sh --down            # remove containers and data
+tapes-skill-report --since-days 90   # default 30
+tapes-skill-report --out DIR         # default tapes-skills
+tapes-skill-report down              # remove containers and data
 ```
 
 Safe to re-run.
 
 ## Privacy
 
-Transcripts behind each suggestion go to OpenAI to write the skill. Everything
-else stays on your laptop.
+Transcripts behind each suggestion go to OpenAI to write the skill, and
+session text is embedded with OpenAI for search. Everything else stays on
+your laptop.
