@@ -160,6 +160,10 @@ With an OpenAI key, the transcripts behind each skill go to OpenAI to write
 it, and session text is embedded with OpenAI for search. Everything else
 stays on your laptop. With `--ollama`, all of it does.
 
+## License
+
+MIT. See [LICENSE](LICENSE).
+
 ## What it runs
 
 The same stack as the [tapes Docker Compose guide](https://tapes.dev/docs/guides/docker-compose/):

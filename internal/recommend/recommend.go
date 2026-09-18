@@ -1,11 +1,11 @@
 // Package recommend finds repeated work in a tapes corpus, the way the
 // console's Skills page does.
 //
-// It is a port of the console's detector (`src/lib/skills/suggest-detect.ts`,
-// console PR #268): tokenize each session, cluster on Jaccard >= 0.15 with
-// union-find, apply the session floor, match clusters against the skills the
-// deployment already holds, template the label. No model call; seconds for a
-// week of sessions.
+// It is a port of the detector behind the Paper console's Skills page:
+// tokenize each session, cluster on Jaccard >= 0.15 with union-find, apply
+// the session floor, match clusters against the skills the deployment
+// already holds, template the label. No model call; seconds for a week of
+// sessions.
 //
 // One substitution: the console clusters on the summary cassette's topics.
 // This tool has no summary cassette, so it tokenizes what the read API
