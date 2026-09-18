@@ -66,7 +66,13 @@ done
 curl -s -o /dev/null "$api/v1/sessions?limit=1" || die "tapes did not come up; try: ${compose[*]} logs tapes"
 
 say "3/5 importing sessions"
-tapesctl sync --projects-root "$work" --since-days 0 --harness-id codex \
+# `--harness-id` files the sessions as codex instead of claude. Older tapesctl
+# builds do not have it, and the label changes nothing downstream, so ask.
+harness=()
+if tapesctl sync --help 2>&1 | grep -q -- "--harness-id"; then
+  harness=(--harness-id codex)
+fi
+tapesctl sync --projects-root "$work" --since-days 0 "${harness[@]}" \
   --ingest-url "$ingest" 2>&1 | grep -v " INFO "
 
 say "4/5 deriving sessions (roughly 5-60s each; a month is usually a few minutes)"
