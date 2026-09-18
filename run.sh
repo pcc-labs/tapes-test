@@ -84,7 +84,15 @@ while [ "$(queue)" != "0" ]; do
 done
 printf '   done                    \n'
 
-skills_written() { find "$out" -name SKILL.md 2>/dev/null | wc -l | tr -d '[:space:]'; }
+# Zero when the directory is absent: `find` on a missing path fails, and under
+# `pipefail` that would end the run just before the step that does the work.
+skills_written() {
+  if [ -d "$out" ]; then
+    find "$out" -name SKILL.md | wc -l | tr -d '[:space:]'
+  else
+    echo 0
+  fi
+}
 before=$(skills_written)
 
 say "5/5 generating skills"
