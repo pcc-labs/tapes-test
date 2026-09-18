@@ -52,8 +52,8 @@ type Stack struct {
 // With ollama, the cassettes use a local Ollama instead of OpenAI: the
 // host's if one answers, otherwise a container.
 func New(ollama bool) (*Stack, error) {
-	if _, err := exec.LookPath("docker"); err != nil {
-		return nil, fmt.Errorf("docker is not installed: https://docs.docker.com/desktop/")
+	if err := Preflight(); err != nil {
+		return nil, err
 	}
 	dir, err := os.UserCacheDir()
 	if err != nil {
@@ -82,6 +82,48 @@ func New(ollama bool) (*Stack, error) {
 		}
 	}
 	return s, nil
+}
+
+// Preflight checks Docker is installed, running, and has compose, and says
+// what to do about whichever is missing.
+func Preflight() error {
+	if _, err := exec.LookPath("docker"); err != nil {
+		return fmt.Errorf("docker is not installed. Install Docker Desktop, start it, and run this again: https://docs.docker.com/desktop/")
+	}
+	if err := exec.Command("docker", "info").Run(); err != nil {
+		return fmt.Errorf("docker is installed but not running. Start Docker Desktop, wait for it to finish starting, and run this again")
+	}
+	if err := exec.Command("docker", "compose", "version").Run(); err != nil {
+		return fmt.Errorf("this docker has no `docker compose`. Update Docker Desktop, or install the compose plugin: https://docs.docker.com/compose/install/")
+	}
+	return nil
+}
+
+// explain turns compose output into the fix for the failures a first run
+// actually meets; empty when it recognises nothing.
+func explain(output string) string {
+	switch {
+	case strings.Contains(output, "port is already allocated"), strings.Contains(output, "address already in use"):
+		return "ports 18081/18082 are taken by something else. If it is an old copy of this stack, run `tapes-skill-report down`; otherwise stop whatever is listening there"
+	case strings.Contains(output, "authorization token has expired"), strings.Contains(output, "public.ecr.aws") && strings.Contains(output, "denied"):
+		return "Docker has a stale login for public.ecr.aws. Run `docker logout public.ecr.aws` and try again"
+	case strings.Contains(output, "no space left on device"):
+		return "Docker is out of disk space. Free some with `docker system prune` and try again"
+	case strings.Contains(output, "TLS handshake timeout"), strings.Contains(output, "no such host"), strings.Contains(output, "i/o timeout"):
+		return "could not download the images. Check your network (or VPN) and try again"
+	}
+	return ""
+}
+
+// OllamaMode is true when the stack on this machine was started with
+// --ollama, so a model call outside the cassettes should go there too.
+func OllamaMode() bool {
+	dir, err := os.UserCacheDir()
+	if err != nil {
+		return false
+	}
+	mode, err := os.ReadFile(filepath.Join(dir, "tapes-skill-report", "mode"))
+	return err == nil && strings.TrimSpace(string(mode)) == "ollama"
 }
 
 func hostOllamaUp() bool {
@@ -165,6 +207,9 @@ func (s *Stack) Up(ctx context.Context) error {
 		fmt.Fprintln(os.Stderr, "  ", line)
 	}
 	if err != nil {
+		if why := explain(buf.String()); why != "" {
+			return fmt.Errorf("could not start tapes: %s", why)
+		}
 		return fmt.Errorf("docker compose up: %w", err)
 	}
 	return os.WriteFile(modeFile, []byte(s.mode()), 0o644)

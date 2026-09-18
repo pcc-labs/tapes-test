@@ -6,10 +6,17 @@ and turn any few of them into a skill. Needs Docker and an OpenAI key.
 
 ## Setup
 
+Start Docker Desktop, then:
+
 ```bash
-go install github.com/pcc-labs/tapes-skill-report@latest
+curl -fsSL https://raw.githubusercontent.com/pcc-labs/tapes-skill-report/main/install.sh | sh
 export OPENAI_API_KEY=sk-...   # or put it in a .env in the current directory
+tapes-skill-report check
 ```
+
+`check` says whether a run would work and what to fix if not: Docker
+running, the key accepted, Codex history found. With Go installed,
+`go install github.com/pcc-labs/tapes-skill-report@latest` works too.
 
 ## Run
 
@@ -17,8 +24,22 @@ export OPENAI_API_KEY=sk-...   # or put it in a .env in the current directory
 tapes-skill-report
 ```
 
-Takes a few minutes. Skills land in `tapes-skills/`; copy the ones you want
-into `.claude/skills/`. If nothing repeated enough, it says so.
+Takes a few minutes; your longest session sets the pace. It ends with what
+your sessions look like and the skills they could become, and asks which to
+write. Skills land in `tapes-skills/`; copy the ones you want into
+`.claude/skills/`. If it is interrupted, run it again: it picks up where it
+stopped.
+
+If you review UI with Codex's browser comments, they come first: how many
+you left, on which pages, the latest in your words, and a skill of the rules
+they keep restating ("too much orange. we can use grays and other shades
+here"). That skill is written from the comments themselves, not from the
+sessions around them.
+
+```bash
+tapes-skill-report suggest    # show it again without writing anything
+tapes-skill-report skill 1    # write suggestion 1
+```
 
 ## Search, then make a skill from what you find
 
@@ -36,7 +57,6 @@ Search fills in the background. Right after the first run, give it a minute.
 
 ```bash
 tapes-skill-report sessions   # what was imported
-tapes-skill-report suggest    # the repeated-work groups, without generating
 ```
 
 ## Or hand it to your agent
@@ -44,9 +64,9 @@ tapes-skill-report suggest    # the repeated-work groups, without generating
 Paste this into Codex or Claude Code:
 
 > Install and run tapes-skill-report for me.
-> 1. Check `docker info` works and `OPENAI_API_KEY` is set. If either is
->    missing, stop and tell me.
-> 2. `go install github.com/pcc-labs/tapes-skill-report@latest`
+> 1. `curl -fsSL https://raw.githubusercontent.com/pcc-labs/tapes-skill-report/main/install.sh | sh`
+> 2. Run `tapes-skill-report check`. If any line says FAIL, stop and tell
+>    me what it says; do not work around it.
 > 3. Run `tapes-skill-report`. It takes several minutes and prints progress
 >    to stderr; do not time it out.
 > 4. Read every `tapes-skills/*/SKILL.md` and tell me which are worth
@@ -58,6 +78,24 @@ Paste this into Codex or Claude Code:
 
 Every command exits non-zero with a one-line reason when it fails. Results
 go to stdout and progress to stderr, so the commands compose.
+
+## When something goes wrong
+
+Every failure prints one line saying what to do. The ones a first run meets:
+
+| It says | Do this |
+| --- | --- |
+| `docker is installed but not running` | Start Docker Desktop and wait for it to finish starting. |
+| `OpenAI rejected OPENAI_API_KEY` | Fix the key. One exported in the shell wins over `.env`. |
+| `no Codex history at …` | Pass `--codex-root DIR`. `CODEX_HOME` is honoured. |
+| `ports 18081/18082 are taken` | `tapes-skill-report down`, or stop what is listening there. |
+| `stale login for public.ecr.aws` | `docker logout public.ecr.aws` |
+| `command not found` after installing | The installer printed the PATH line to add. Open a new terminal after adding it. |
+| `no hits` from `search` | Embeddings fill in the background. Wait a minute. |
+| `lost contact with the tapes database` | Check Docker is still running, then run it again. |
+
+Anything else: `tapes-skill-report down` and run it again. That only deletes
+this tool's containers and data, never your Codex history.
 
 ## Options
 
@@ -97,7 +135,8 @@ stays on your laptop. With `--ollama`, all of it does.
 ## What it runs
 
 The same stack as the [tapes Docker Compose guide](https://tapes.dev/docs/guides/docker-compose/):
-postgres, tapes, and the skills and search cassettes. The compose file ships
-inside the binary, so there is nothing to clone. The API is on
+postgres, tapes with four derive workers, and the skills and search
+cassettes. The compose file ships inside the binary, so there is nothing to
+clone, and its images are pinned to the versions this build was tested with. The API is on
 `127.0.0.1:18081`, and `tapesctl --api-url http://127.0.0.1:18081` works
 against it.

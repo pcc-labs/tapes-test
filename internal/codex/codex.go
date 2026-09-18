@@ -76,8 +76,12 @@ func (s Summary) Render() string {
 	return strings.Join(parts, ", ")
 }
 
-// DefaultRoot is where the Codex CLI keeps its rollouts.
+// DefaultRoot is where the Codex CLI keeps its rollouts: under CODEX_HOME
+// when that is set, otherwise ~/.codex.
 func DefaultRoot() string {
+	if home := os.Getenv("CODEX_HOME"); home != "" {
+		return filepath.Join(home, "sessions")
+	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return ".codex/sessions"

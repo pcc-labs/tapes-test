@@ -21,15 +21,16 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"net/http"
 	"os"
 	"os/signal"
 	"os/user"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/pcc-labs/tapes-skill-report/internal/codex"
-	"github.com/pcc-labs/tapes-skill-report/internal/recommend"
 	"github.com/pcc-labs/tapes-skill-report/internal/stack"
 	"github.com/pcc-labs/tapes-skill-report/internal/tapes"
 )
@@ -38,11 +39,13 @@ const usage = `usage: tapes-skill-report [command] [flags]
 
 commands:
   run        import Codex history, derive it, write skills (default)
+  check      say whether a run would work, and what to fix if not
   sessions   list imported sessions
   search     semantic search over imported sessions
-  suggest    print the repeated-work clusters without generating skills
-  skill      write one skill from the sessions you name
+  suggest    show what your sessions look like and the skills they could be
+  skill      write a skill: by suggestion number, or from session ids
   down       stop the stack and delete its data
+  version    print the version
 
 run flags:
   --since-days N   rollouts modified in the last N days (default 30; 0 = all)
@@ -50,6 +53,10 @@ run flags:
   --codex-root DIR Codex sessions tree (default ~/.codex/sessions)
   --ollama         use a local Ollama instead of OpenAI: nothing leaves the
                    machine, but skills are slower and rougher
+  --yes            write every suggested skill without asking
+
+check flags:
+  --codex-root DIR, --ollama   as for run
 
 sessions flags:
   --limit N        rows to print (default 50; 0 = all)
@@ -58,11 +65,19 @@ search flags:
   -k N             hits to return (default 5)
   -q               print only session ids, one per line, best first
 
+suggest flags:
+  --since-days N, --codex-root DIR   as for run
+
 skill flags:
   --out DIR        where <slug>/SKILL.md is written (default tapes-skills)
+  --since-days N   the window the suggestion numbers came from (default 30)
 
+  tapes-skill-report skill 1 3
   tapes-skill-report skill $(tapes-skill-report search -q "how I fixed auth")
 `
+
+// version is set by the release build.
+var version = "dev"
 
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
@@ -85,37 +100,53 @@ func main() {
 		err = suggest(ctx, args)
 	case "skill":
 		err = skill(ctx, args)
+	case "check":
+		err = check(ctx, args)
 	case "down":
 		err = down(ctx)
+	case "version", "--version":
+		fmt.Println(version)
 	case "help", "-h", "--help":
 		fmt.Print(usage)
 	default:
 		err = fmt.Errorf("unknown command %q\n\n%s", cmd, usage)
 	}
+	if errors.Is(err, flag.ErrHelp) {
+		return // the flag set already printed the usage
+	}
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "tapes-skill-report: %v\n", err)
+		fail(err)
 		os.Exit(1)
 	}
 }
 
-func say(format string, a ...any)  { fmt.Fprintf(os.Stderr, "\n== "+format+"\n", a...) }
-func note(format string, a ...any) { fmt.Fprintf(os.Stderr, "   "+format+"\n", a...) }
+// newFlags is a subcommand's flag set: -h and --help print the usage above
+// and exit cleanly, instead of Go's bare flag list and an error.
+func newFlags(name string) *flag.FlagSet {
+	fs := flag.NewFlagSet(name, flag.ContinueOnError)
+	fs.SetOutput(os.Stdout)
+	fs.Usage = func() { fmt.Print(usage) }
+	return fs
+}
 
 func run(ctx context.Context, args []string) error {
-	fs := flag.NewFlagSet("run", flag.ContinueOnError)
+	fs := newFlags("run")
 	sinceDays := fs.Int("since-days", 30, "")
 	out := fs.String("out", "tapes-skills", "")
 	root := fs.String("codex-root", codex.DefaultRoot(), "")
 	ollama := fs.Bool("ollama", false, "")
+	yes := fs.Bool("yes", false, "")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	loadDotEnv()
-	if !*ollama && os.Getenv("OPENAI_API_KEY") == "" {
-		return errors.New("no OPENAI_API_KEY: export it, or put OPENAI_API_KEY=sk-... in ./.env (or pass --ollama to stay fully local)")
+	if !*ollama {
+		if err := checkOpenAIKey(ctx); err != nil {
+			return err
+		}
 	}
 	if _, err := os.Stat(*root); err != nil {
-		return fmt.Errorf("no Codex history at %s", *root)
+		return fmt.Errorf("no Codex history at %s. If Codex keeps it elsewhere, pass --codex-root DIR", *root)
 	}
 	st, err := stack.New(*ollama)
 	if err != nil {
@@ -132,7 +163,7 @@ func run(ctx context.Context, args []string) error {
 		return fmt.Errorf("nothing to import from %s; widen --since-days or check --codex-root", *root)
 	}
 
-	say("2/5 starting tapes (postgres, tapes, skills and search cassettes)")
+	say("2/5 starting tapes (postgres, tapes, derive workers, skills and search cassettes)")
 	if err := st.Up(ctx); err != nil {
 		return err
 	}
@@ -174,35 +205,46 @@ func run(ctx context.Context, args []string) error {
 	}
 	note("done            ")
 
-	say("4/5 deriving sessions (roughly 5-60s each; a month is usually a few minutes)")
+	say("4/5 deriving sessions, four at a time (the longest session sets the pace)")
 	if err := waitForQueue(ctx, st); err != nil {
 		return err
 	}
 
-	say("5/5 generating skills")
-	before := skillsWritten(*out)
-	written, covered, failed, err := generate(ctx, client, *out)
+	say("5/5 what your sessions look like")
+	c, err := detect(ctx, client, readFeedback(*root, *sinceDays))
 	if err != nil {
 		return err
 	}
-	// A month of one person's history often holds no three similar sessions.
-	// Count what THIS run wrote: an earlier run's skills are still in the
-	// directory.
-	switch {
-	case written > 0:
-		say("skills are in ./%s", *out)
-	case failed > 0:
-		say("found %d group(s) of repeated work, but writing the skills failed (above)", failed)
-		if *ollama {
-			note("local models often run out the cassette's 30s budget; an OpenAI key is the reliable path")
+	c.show(os.Stderr, errUI, *sinceDays)
+	chosen, err := c.pick(*yes)
+	if err != nil {
+		return err
+	}
+	if len(chosen) == 0 {
+		if len(c.suggestions) > 0 {
+			note("nothing written; `tapes-skill-report skill N` writes one later")
 		}
-	case before > 0:
-		say("no new skills: the repeated work in the last %d day(s) is already covered by ./%s", *sinceDays, *out)
-	case covered > 0:
-		say("nothing new: %d group(s) match a skill you already have", covered)
-	default:
-		say("no skills this time: nothing in the last %d day(s) repeated enough to be worth one", *sinceDays)
-		note("try a wider window:  tapes-skill-report --since-days 90")
+	} else {
+		say("writing %d skill(s)", len(chosen))
+		// A hosted model writes several skills at once. A local one is a single
+		// GPU on a 30s budget per call, so it takes them one at a time.
+		parallel := 3
+		if *ollama {
+			parallel = 1
+		}
+		written, failed, err := c.write(ctx, client, *out, chosen, parallel)
+		if err != nil {
+			return err
+		}
+		switch {
+		case written > 0:
+			say("skills are in ./%s", *out)
+		case failed > 0:
+			say("writing the skills failed (above)")
+			if *ollama {
+				note("local models often run out the cassette's 30s budget; an OpenAI key is the reliable path")
+			}
+		}
 	}
 	note("browse what was imported:  tapes-skill-report sessions")
 	note("search it:                 tapes-skill-report search \"how did I fix auth\"")
@@ -210,34 +252,28 @@ func run(ctx context.Context, args []string) error {
 	return nil
 }
 
-// generate detects clusters and writes a SKILL.md for each new one. It
-// returns how many it wrote, how many clusters an existing skill covers, and
-// how many the skills cassette failed on.
-func generate(ctx context.Context, client *tapes.Client, out string) (written, covered, failed int, err error) {
-	suggestions, byID, err := detect(ctx, client)
-	if err != nil {
-		return 0, 0, 0, err
+// each runs fn(0..n-1) with at most limit in flight and returns the first
+// error, after every started call has finished.
+func each(n, limit int, fn func(i int) error) error {
+	var (
+		wg    sync.WaitGroup
+		once  sync.Once
+		first error
+		slots = make(chan struct{}, max(1, limit))
+	)
+	for i := range n {
+		slots <- struct{}{}
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			defer func() { <-slots }()
+			if err := fn(i); err != nil {
+				once.Do(func() { first = err })
+			}
+		}()
 	}
-	for _, s := range suggestions {
-		if s.Kind != "new" {
-			covered++
-			continue
-		}
-		ids := s.SessionIDs[:min(3, len(s.SessionIDs))]
-		dest, err := writeSkill(ctx, client, out, ids)
-		var ge *generateError
-		if errors.As(err, &ge) {
-			note("generate failed for %q: %v", s.Title, err)
-			failed++
-			continue
-		}
-		if err != nil {
-			return written, covered, failed, err
-		}
-		note("wrote %s  (from %d sessions, e.g. %s)", dest, len(s.SessionIDs), truncate(oneLine(byID[ids[0]].Title), 60))
-		written++
-	}
-	return written, covered, failed, nil
+	wg.Wait()
+	return first
 }
 
 // generateError is the skills cassette declining or failing to write a
@@ -268,134 +304,78 @@ func writeSkill(ctx context.Context, client *tapes.Client, out string, ids []str
 	return dest, nil
 }
 
-// skill writes one skill from sessions the user picked, usually the ids
-// `search -q` printed.
-func skill(ctx context.Context, args []string) error {
-	fs := flag.NewFlagSet("skill", flag.ContinueOnError)
-	out := fs.String("out", "tapes-skills", "")
-	if err := fs.Parse(args); err != nil {
-		return err
+// checkOpenAIKey fails before any work starts when the key is missing or
+// OpenAI rejects it; otherwise a bad key surfaces minutes later, as every
+// skill failing to generate. Anything short of a rejection (offline, a
+// proxy in the way) is left for the run itself to meet.
+func checkOpenAIKey(ctx context.Context) error {
+	key := os.Getenv("OPENAI_API_KEY")
+	if key == "" {
+		return errors.New("no OPENAI_API_KEY: export it, or put OPENAI_API_KEY=sk-... in ./.env (or pass --ollama to stay fully local)")
 	}
-	ids := fs.Args()
-	if len(ids) == 0 {
-		return errors.New("skill needs session ids: tapes-skill-report skill $(tapes-skill-report search -q \"query\")")
-	}
-	client := tapes.New(stack.API, stack.Ingest)
-	note("generating one skill from %d session(s)", len(ids))
-	dest, err := writeSkill(ctx, client, *out, ids)
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://api.openai.com/v1/models", nil)
 	if err != nil {
-		return fmt.Errorf("generate failed (is the stack up?): %w", err)
+		return nil
 	}
-	fmt.Println(dest)
+	req.Header.Set("Authorization", "Bearer "+key)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil
+	}
+	resp.Body.Close()
+	if resp.StatusCode == http.StatusUnauthorized {
+		return errors.New("OpenAI rejected OPENAI_API_KEY (401). Check the key at https://platform.openai.com/api-keys; a .env in this directory is only used when the shell has not exported one")
+	}
 	return nil
 }
 
-// detect reads every derived session from the API and runs the detector.
-func detect(ctx context.Context, client *tapes.Client) ([]recommend.Suggestion, map[string]recommend.Session, error) {
-	rows, err := client.Sessions(ctx, 0)
-	if err != nil {
-		return nil, nil, fmt.Errorf("cannot read %s: %w", client.API, err)
-	}
-	var sessions []recommend.Session
-	seen := map[string]bool{} // one entry per harness session, whatever it was filed under
-	for _, row := range rows {
-		key := row.HarnessSessionID
-		if key == "" {
-			key = row.ID
-		}
-		if seen[key] || row.Rollup.TurnCount == 0 {
-			continue
-		}
-		seen[key] = true
-		traces, err := client.Traces(ctx, row.ID)
-		if err != nil {
-			return nil, nil, err
-		}
-		tokens := recommend.SessionTokens(traceText(traces))
-		if len(tokens) < recommend.MinTokens {
-			continue
-		}
-		title := row.DisplayTitle
-		if title == "" {
-			title = row.ID
-		}
-		sessions = append(sessions, recommend.Session{
-			ID:      row.ID,
-			Title:   title,
-			Author:  row.AuthSubject,
-			Project: filepath.Base(row.Cwd),
-			Tokens:  tokens,
-		})
-	}
-	existing, err := client.Skills(ctx)
-	if err != nil {
-		return nil, nil, err
-	}
-	skills := make([]recommend.Skill, 0, len(existing))
-	for _, sk := range existing {
-		skills = append(skills, recommend.Skill{
-			ID: sk.ID, Slug: sk.Slug, Name: sk.Name, Description: sk.Description,
-			Tags: sk.Tags, SourceSessionIDs: sk.SourceIDs,
-		})
-	}
-	note("%d sessions with turns, %d existing skills", len(sessions), len(skills))
-	byID := map[string]recommend.Session{}
-	for _, s := range sessions {
-		byID[s.ID] = s
-	}
-	return recommend.Detect(sessions, skills, recommend.MinSessions), byID, nil
-}
-
-func traceText(traces []tapes.Trace) []recommend.TraceText {
-	out := make([]recommend.TraceText, 0, len(traces))
-	for _, t := range traces {
-		tt := recommend.TraceText{UserPrompt: t.Trace.UserPrompt, ResponsePreview: t.Trace.ResponsePreview}
-		for _, sp := range t.Spans {
-			switch {
-			case sp.Kind == "tool":
-				tt.ToolNames = append(tt.ToolNames, sp.Name)
-			case sp.Kind == "llm" && sp.Model != "":
-				tt.Models = append(tt.Models, sp.Model)
-			}
-		}
-		out = append(out, tt)
-	}
-	return out
-}
-
-func suggest(ctx context.Context, args []string) error {
-	fs := flag.NewFlagSet("suggest", flag.ContinueOnError)
+// check reports whether a run would work, one line per requirement, and
+// fails if any does not hold.
+func check(ctx context.Context, args []string) error {
+	fs := newFlags("check")
+	root := fs.String("codex-root", codex.DefaultRoot(), "")
+	ollama := fs.Bool("ollama", false, "")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	loadDotEnv()
+	failed := 0
+	report := func(name string, err error, ok string) {
+		if err != nil {
+			failed++
+			fmt.Printf("%s  %s: %v\n", outUI.badTag.Render("FAIL"), outUI.strong.Render(name), err)
+			return
+		}
+		fmt.Printf("%s    %s: %s\n", outUI.okTag.Render("ok"), outUI.strong.Render(name), ok)
+	}
+	report("docker", stack.Preflight(), "installed, running, has compose")
+	if *ollama {
+		report("models", nil, "local Ollama; no key needed")
+	} else {
+		report("openai key", checkOpenAIKey(ctx), "set and accepted")
+	}
+	paths, err := codex.Rollouts(*root, 30)
+	if err == nil && len(paths) == 0 {
+		err = fmt.Errorf("no sessions from the last 30 days under %s; try --since-days 90 when you run", *root)
+	}
+	report("codex history", err, fmt.Sprintf("%d session file(s) from the last 30 days in %s", len(paths), *root))
 	client := tapes.New(stack.API, stack.Ingest)
-	suggestions, byID, err := detect(ctx, client)
-	if err != nil {
-		return err
+	if client.Ping(ctx) {
+		report("stack", nil, "already up at "+stack.API)
+	} else {
+		report("stack", nil, "not started yet; `tapes-skill-report` starts it")
 	}
-	if len(suggestions) == 0 {
-		fmt.Println("no group of 3 or more sessions repeated the same work")
-		return nil
+	if failed > 0 {
+		return fmt.Errorf("%d check(s) failed; fix those and run `tapes-skill-report check` again", failed)
 	}
-	for n, s := range suggestions {
-		fmt.Printf("%d. [%s] %s\n   %s\n", n+1, s.Kind, s.Title, s.Why)
-		for _, id := range s.SessionIDs[:min(6, len(s.SessionIDs))] {
-			sess := byID[id]
-			fmt.Printf("   - %s  %s: %s\n", id, sess.Project, truncate(sess.Title, 60))
-		}
-		if len(s.SessionIDs) > 6 {
-			fmt.Printf("   - … %d more\n", len(s.SessionIDs)-6)
-		}
-		if s.Skill != nil {
-			fmt.Printf("   skill: %s (%s)\n", s.Skill.Slug, s.Skill.ID)
-		}
-		fmt.Println()
-	}
+	fmt.Println(outUI.okTag.Render("ready:") + " run `tapes-skill-report`")
 	return nil
 }
 
 func sessions(ctx context.Context, args []string) error {
-	fs := flag.NewFlagSet("sessions", flag.ContinueOnError)
+	fs := newFlags("sessions")
 	limit := fs.Int("limit", 50, "")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -409,7 +389,7 @@ func sessions(ctx context.Context, args []string) error {
 		fmt.Println("no sessions imported yet")
 		return nil
 	}
-	fmt.Printf("%-10s  %5s  %-20s  %-48s  %s\n", "DATE", "TURNS", "PROJECT", "TITLE", "ID")
+	fmt.Println(outUI.dim.Render(fmt.Sprintf("%-10s  %5s  %-20s  %-48s  %s", "DATE", "TURNS", "PROJECT", "TITLE", "ID")))
 	seen := map[string]bool{} // one row per harness session, whatever it was filed under
 	printed := 0
 	for _, r := range rows {
@@ -428,13 +408,13 @@ func sessions(ctx context.Context, args []string) error {
 			r.Rollup.TurnCount,
 			truncate(filepath.Base(r.Cwd), 20),
 			truncate(oneLine(r.DisplayTitle), 48),
-			r.ID)
+			outUI.dim.Render(r.ID))
 	}
 	return nil
 }
 
 func search(ctx context.Context, args []string) error {
-	fs := flag.NewFlagSet("search", flag.ContinueOnError)
+	fs := newFlags("search")
 	top := fs.Int("k", 5, "")
 	quiet := fs.Bool("q", false, "")
 	if err := fs.Parse(args); err != nil {
@@ -487,10 +467,10 @@ func search(ctx context.Context, args []string) error {
 			continue
 		}
 		seen[turn] = true
-		fmt.Printf("%.2f  %s  %s\n", h.Score, h.StartedAt.Local().Format("2006-01-02"), h.SessionID)
+		fmt.Printf("%s  %s  %s\n", outUI.score.Render(fmt.Sprintf("%.2f", h.Score)), h.StartedAt.Local().Format("2006-01-02"), outUI.dim.Render(h.SessionID))
 		p, s := oneLine(h.UserPrompt), oneLine(h.Snippet)
 		if p != "" {
-			fmt.Printf("      prompt: %s\n", truncate(p, 100))
+			fmt.Printf("      %s %s\n", outUI.dim.Render("prompt:"), truncate(p, 100))
 		}
 		if s != "" && s != p {
 			fmt.Printf("      %s\n", truncate(s, 100))
@@ -555,12 +535,44 @@ func waitFor(ctx context.Context, ok func(context.Context) bool, timeout time.Du
 
 // waitForQueue polls the derive queue until it drains. The first poll waits
 // a few seconds so the uploads have been marked dirty.
+//
+// One failed read is not the end: the database restarts, Docker hiccups. It
+// gives up after a run of failures, or when the queue has not moved for
+// stallAfter, which is several times the longest session seen in practice.
 func waitForQueue(ctx context.Context, st *stack.Stack) error {
-	time.Sleep(5 * time.Second)
+	const (
+		maxFailures = 10
+		stallAfter  = 15 * time.Minute
+	)
+	time.Sleep(3 * time.Second)
+	failures, last, moved := 0, -1, time.Now()
 	for {
 		n, err := st.QueueDepth(ctx)
+		switch {
+		case err != nil && ctx.Err() != nil:
+			return ctx.Err()
+		case err != nil:
+			failures++
+			if failures == maxFailures {
+				return fmt.Errorf("lost contact with the tapes database (%v). Is Docker still running? Nothing is lost: run `tapes-skill-report` again and it picks up where it stopped", err)
+			}
+			n = last
+		default:
+			failures = 0
+		}
+		if n != last {
+			last, moved = n, time.Now()
+		}
+		if time.Since(moved) > stallAfter {
+			return fmt.Errorf("deriving has not moved in %s with %d session(s) left. See why with: docker compose -f %s logs derive tapes", stallAfter, n, st.File())
+		}
 		if err != nil {
-			return fmt.Errorf("reading derive queue: %w", err)
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(2 * time.Second):
+			}
+			continue
 		}
 		if n == 0 {
 			note("done                    ")
@@ -570,20 +582,9 @@ func waitForQueue(ctx context.Context, st *stack.Stack) error {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-time.After(10 * time.Second):
+		case <-time.After(2 * time.Second):
 		}
 	}
-}
-
-func skillsWritten(out string) int {
-	n := 0
-	filepath.WalkDir(out, func(path string, d os.DirEntry, err error) error {
-		if err == nil && !d.IsDir() && d.Name() == "SKILL.md" {
-			n++
-		}
-		return nil
-	})
-	return n
 }
 
 func username() string {
@@ -593,11 +594,13 @@ func username() string {
 	return "unknown"
 }
 
+// truncate keeps the first n characters, never splitting one.
 func truncate(s string, n int) string {
-	if len(s) <= n {
+	r := []rune(s)
+	if len(r) <= n {
 		return s
 	}
-	return s[:n]
+	return string(r[:n])
 }
 
 func oneLine(s string) string {

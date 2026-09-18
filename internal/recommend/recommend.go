@@ -155,6 +155,9 @@ type Suggestion struct {
 	SessionIDs []string
 	Skill      *Skill // set for "evaluate"
 	Topic      []string
+	// FromComments marks the suggestion built from browser comments, whose
+	// SessionIDs are ranked most comments first.
+	FromComments bool
 }
 
 // TraceText is the input SessionTokens reads: one turn's prompt, preview,
@@ -173,7 +176,7 @@ func SessionTokens(turns []TraceText) Set {
 	var texts []string
 	models := Set{}
 	for _, t := range turns {
-		texts = append(texts, t.UserPrompt, t.ResponsePreview)
+		texts = append(texts, Ask(t.UserPrompt), t.ResponsePreview)
 		texts = append(texts, t.ToolNames...)
 		for _, m := range t.Models {
 			models[m] = struct{}{}
@@ -191,6 +194,42 @@ func SessionTokens(turns []TraceText) Set {
 		}
 	}
 	return Tokenize(texts, promptNoise)
+}
+
+// xmlBlock is one of Codex's injected context blocks: a tag on a line of its
+// own through its closing tag, or through the end when the prompt was cut
+// off inside it.
+var xmlBlock = regexp.MustCompile(`(?s)<([a-z_-]+)[^>]*>.*?(?:</[a-z_-]+>|\z)`)
+
+// Ask is what the person typed in a prompt, without the scaffolding Codex
+// wraps around it: injected context blocks (browser state, plugin lists),
+// pasted-file headings and paths, and a browser comment's page evidence,
+// of which only the comment itself is theirs. Clustered as is, that
+// scaffolding is identical across sessions and names the groups ("Comment
+// Comments Node Position", "Acd Airtable Alpaca Apollo").
+func Ask(prompt string) string {
+	if _, after, ok := strings.Cut(prompt, "## My request for Codex:"); ok {
+		prompt = after
+	}
+	prompt = xmlBlock.ReplaceAllString(prompt, " ")
+	if strings.Contains(prompt, "# Browser comments") {
+		var comments []string
+		for _, part := range strings.Split(prompt, "Comment:\n")[1:] {
+			line, _, _ := strings.Cut(part, "\n")
+			comments = append(comments, line)
+		}
+		return strings.Join(comments, " ")
+	}
+	var kept []string
+	for _, line := range strings.Split(prompt, "\n") {
+		t := strings.TrimSpace(line)
+		// A heading from pasted context, or "## name.png: /path/to/it".
+		if strings.HasPrefix(t, "#") {
+			continue
+		}
+		kept = append(kept, t)
+	}
+	return strings.Join(kept, " ")
 }
 
 func documentFrequency(pool map[string]Set) map[string]int {
@@ -423,6 +462,89 @@ func Detect(sessions []Session, skills []Skill, minSessions int) []Suggestion {
 	}
 	return kept
 }
+
+// ByProject is the basic pass, for when Detect finds nothing: three or more
+// sessions in one project are work a project skill could carry, whatever
+// they were about. Sessions a skill already came from do not count, and
+// neither do projects that are not one (a home or temp directory). Largest
+// projects first, at most maxPerKind.
+func ByProject(sessions []Session, skills []Skill, minSessions int) []Suggestion {
+	sourced := Set{}
+	for _, sk := range skills {
+		for _, id := range sk.SourceSessionIDs {
+			sourced[id] = struct{}{}
+		}
+	}
+	byProject := map[string][]Session{}
+	for _, s := range sessions {
+		if sourced.has(s.ID) || notAProject.has(strings.ToLower(s.Project)) {
+			continue
+		}
+		byProject[s.Project] = append(byProject[s.Project], s)
+	}
+	pool := map[string]Set{}
+	for _, s := range sessions {
+		pool[s.ID] = s.Tokens
+	}
+	corpusDF := documentFrequency(pool)
+
+	var out []Suggestion
+	for project, members := range byProject {
+		if len(members) < minSessions {
+			continue
+		}
+		counts := map[string]int{}
+		ids := make([]string, 0, len(members))
+		for _, s := range members {
+			ids = append(ids, s.ID)
+			for t := range s.Tokens {
+				counts[t]++
+			}
+		}
+		sort.Strings(ids)
+		// What this project's sessions said and the rest of the corpus did
+		// not: shared by two or more of them, rarest elsewhere first.
+		// The project's own name ("contributor.info") says nothing new.
+		name := Tokenize([]string{project}, nil)
+		var shared []string
+		for t, n := range counts {
+			if n >= 2 && !name.has(t) {
+				shared = append(shared, t)
+			}
+		}
+		sort.Slice(shared, func(i, j int) bool {
+			a, b := shared[i], shared[j]
+			ra := float64(counts[a]) / float64(corpusDF[a])
+			rb := float64(counts[b]) / float64(corpusDF[b])
+			if ra != rb {
+				return ra > rb
+			}
+			if counts[a] != counts[b] {
+				return counts[a] > counts[b]
+			}
+			return a < b
+		})
+		top := shared[:min(4, len(shared))]
+		out = append(out, Suggestion{
+			Kind:       "new",
+			Title:      truncate("Working in "+project, 60),
+			Why:        fmt.Sprintf("%d sessions in %s with no skill carrying what they repeat.", len(members), project),
+			TypeHint:   "workflow",
+			SessionIDs: ids,
+			Topic:      top,
+		})
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		if len(out[i].SessionIDs) != len(out[j].SessionIDs) {
+			return len(out[i].SessionIDs) > len(out[j].SessionIDs)
+		}
+		return out[i].Title < out[j].Title
+	})
+	return out[:min(maxPerKind, len(out))]
+}
+
+// notAProject are working directories that hold unrelated sessions.
+var notAProject = set("tmp temp downloads desktop documents code src . /")
 
 func truncate(s string, n int) string {
 	if len(s) <= n {

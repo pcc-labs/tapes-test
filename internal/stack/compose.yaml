@@ -1,16 +1,20 @@
-# Local tapes for a one-person skill report. Four containers: postgres,
-# tapes, the skills cassette, and the search cassette. No Ollama: skill
+# Local tapes for a one-person skill report: postgres, tapes, the skills
+# cassette, the search cassette, and four derive workers. No Ollama: skill
 # generation and span embeddings both go to OpenAI with the key exported as
 # OPENAI_API_KEY. Nothing else leaves the machine.
 #
 # Host ports: 18081 tapes API, 18082 tapes ingest. Postgres and the cassettes
 # are not published; the tool reads postgres through `docker compose exec`
 # and the cassettes through the API.
+#
+# Images are pinned by digest to the set this build was tested against
+# (tapes v0.43.0, cassettes of 2026-08-15), so a later release cannot break
+# an install. Each digest is a multi-platform index: arm64 and amd64.
 name: tapes-local-report
 
 services:
   postgres:
-    image: public.ecr.aws/g4e5l3z3/papercomputeco/postgres:17.7-pgduckdb-1.1.1
+    image: public.ecr.aws/g4e5l3z3/papercomputeco/postgres:17.7-pgduckdb-1.1.1@sha256:3ecbc4d6801678a7c657446b12c337558d8259c78657e35e3dbbb0049f429898
     environment:
       POSTGRES_DB: tapes
       POSTGRES_USER: tapes
@@ -24,7 +28,7 @@ services:
       retries: 30
 
   skills:
-    image: public.ecr.aws/g4e5l3z3/papercomputeco/skills-cassette:latest
+    image: public.ecr.aws/g4e5l3z3/papercomputeco/skills-cassette@sha256:31833fdc4529c3c5e89344b35449b4ba138952bd9ed8a26a8423c51b702b8fe7
     environment:
       CASSETTE_CORE_URL: http://tapes.svc:8081
       CASSETTE_LLM_PROVIDER: openai
@@ -36,7 +40,7 @@ services:
         condition: service_healthy
 
   search:
-    image: public.ecr.aws/g4e5l3z3/papercomputeco/search-cassette:latest
+    image: public.ecr.aws/g4e5l3z3/papercomputeco/search-cassette@sha256:d7429344219189458b3077775a067a3c12f38e5457bbb0d50f8d584f0ee94157
     environment:
       CASSETTE_EMBEDDING_PROVIDER: openai
       CASSETTE_EMBEDDING_TARGET: https://api.openai.com
@@ -50,7 +54,7 @@ services:
         condition: service_healthy
 
   tapes:
-    image: public.ecr.aws/g4e5l3z3/papercomputeco/tapes:latest
+    image: public.ecr.aws/g4e5l3z3/papercomputeco/tapes:v0.43.0@sha256:424ce96bead77ee7847ab0e0643a1c3b9d0f1d38c1df943e8687acdfc4b5ec58
     # The proxy's upstream is unused here (history is imported, not captured
     # live), but serve wants one.
     command: >-
@@ -75,6 +79,25 @@ services:
       skills:
         condition: service_started
       search:
+        condition: service_started
+
+  # `serve` derives too, but one session at a time and only after an upload
+  # has been quiet for 20s. An import is one burst of whole sessions, so
+  # these pick them up after 1s, several at once. A per-session advisory
+  # lock keeps the workers off each other's sessions.
+  derive:
+    image: public.ecr.aws/g4e5l3z3/papercomputeco/tapes:v0.43.0@sha256:424ce96bead77ee7847ab0e0643a1c3b9d0f1d38c1df943e8687acdfc4b5ec58
+    command: >-
+      serve derive-worker
+      --postgres postgres://tapes:tapes@postgres:5432/tapes?sslmode=disable
+      --debounce 1s
+      --poll-interval 1s
+      --wait-for-db
+    deploy:
+      replicas: 4
+    restart: on-failure
+    depends_on:
+      tapes:
         condition: service_started
 
 volumes:
