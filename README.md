@@ -5,22 +5,38 @@ what you keep correcting, what you keep repeating, and a skill written from
 it. Nothing leaves the machine except the one model call that writes the
 skill.
 
-Codex today. Needs Docker and an OpenAI key.
+Codex today, on macOS or Linux.
+
+## Prerequisites
+
+| | Why | Get it |
+| --- | --- | --- |
+| **Docker**, running | The local tapes stack: postgres, tapes, and the skills and search cassettes. About 1.2 GB of images, a few GB of data, ports 18081 and 18082 on loopback. | [Docker Desktop](https://docs.docker.com/desktop/) |
+| **Go** 1.24+ | To install with `go install`, and to build from source. Skip it if you take the prebuilt binary below. | [go.dev/dl](https://go.dev/dl/) |
+| **An OpenAI key** | Writes the skills and embeds sessions for search. Skip it with `--ollama`. | [platform.openai.com/api-keys](https://platform.openai.com/api-keys) |
+| **Codex history** | What it reads: `~/.codex/sessions`, or `CODEX_HOME`. Nothing to do if you already use Codex. | [Codex CLI](https://developers.openai.com/codex/cli) |
+| **Ollama** (optional) | With `--ollama`, writes the skills and embeds locally, so nothing leaves the machine. Install it natively on a Mac: the Docker one has no GPU. | [ollama.com/download](https://ollama.com/download) |
+
+Windows works through [WSL](https://learn.microsoft.com/windows/wsl/install).
 
 ## Setup
 
 Start Docker Desktop, then:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/pcc-labs/tapes-test/main/install.sh | sh
+go install github.com/pcc-labs/tapes-test/cmd/tapes-skills-demo@latest
 export OPENAI_API_KEY=sk-...   # or put it in a .env in the current directory
 tapes-skills-demo check
 ```
 
+Without Go, take the prebuilt binary instead, which needs nothing installed:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/pcc-labs/tapes-test/main/install.sh | sh
+```
+
 `check` says whether a run would work and what to fix if not: Docker
-running, the key accepted, Codex history found. With Go installed,
-`go install github.com/pcc-labs/tapes-test/cmd/tapes-skills-demo@latest`
-works too.
+running, the key accepted, Codex history found.
 
 ## Run
 
@@ -91,7 +107,9 @@ tapes-skills-demo sessions   # what was imported
 Paste this into Codex or Claude Code:
 
 > Install and run tapes-skills-demo for me.
-> 1. `curl -fsSL https://raw.githubusercontent.com/pcc-labs/tapes-test/main/install.sh | sh`
+> 1. `go install github.com/pcc-labs/tapes-test/cmd/tapes-skills-demo@latest`,
+>    or if I have no Go,
+>    `curl -fsSL https://raw.githubusercontent.com/pcc-labs/tapes-test/main/install.sh | sh`
 > 2. Run `tapes-skills-demo check`. If any line says FAIL, stop and tell
 >    me what it says; do not work around it.
 > 3. Run `tapes-skills-demo`. It takes several minutes and prints progress
@@ -141,9 +159,9 @@ Safe to re-run.
 tapes-skills-demo --ollama
 ```
 
-Nothing leaves your laptop at all. It uses the Ollama already running on
-your machine, or starts one in Docker if there is none, and downloads
-`embeddinggemma` and `llama3.2` (about 3 GB) the first time.
+Nothing leaves your laptop at all. It uses the [Ollama](https://ollama.com/download)
+already running on your machine, or starts one in Docker if there is none,
+and downloads `embeddinggemma` and `llama3.2` (about 3 GB) the first time.
 
 The OpenAI key is the better experience. A local model gets 30 seconds and
 the first 8 KB of each session, so the skills are rougher and some come back
