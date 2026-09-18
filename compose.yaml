@@ -1,0 +1,68 @@
+# Local tapes for a one-person skill report (PCC-1415). Three containers:
+# postgres, tapes, and the skills cassette. No Ollama, no search or export
+# cassettes: this stack only imports history and generates skills, and the
+# generation call goes to OpenAI with the key exported as OPENAI_API_KEY.
+# Nothing else leaves the machine. `run.sh` next to this file drives it.
+#
+# Host ports: 18081 tapes API, 18082 tapes ingest, 19999 skills cassette.
+# Postgres is not published; run.sh reads it through `docker compose exec`.
+name: tapes-local-report
+
+services:
+  postgres:
+    image: public.ecr.aws/g4e5l3z3/papercomputeco/postgres:17.7-pgduckdb-1.1.1
+    environment:
+      POSTGRES_DB: tapes
+      POSTGRES_USER: tapes
+      POSTGRES_PASSWORD: tapes
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U tapes -d tapes"]
+      interval: 1s
+      timeout: 3s
+      retries: 30
+
+  skills:
+    image: public.ecr.aws/g4e5l3z3/papercomputeco/skills-cassette:latest
+    environment:
+      CASSETTE_CORE_URL: http://tapes.svc:8081
+      CASSETTE_LLM_PROVIDER: openai
+      CASSETTE_LLM_API_KEY: ${OPENAI_API_KEY:-}
+      CASSETTE_LLM_MODEL: ${TAPES_SKILL_MODEL:-gpt-4o-mini}
+      TAPES_DATABASE_URL: postgres://tapes:tapes@postgres:5432/tapes?sslmode=disable
+    ports:
+      - "127.0.0.1:19999:9998"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  tapes:
+    image: public.ecr.aws/g4e5l3z3/papercomputeco/tapes:latest
+    # The proxy's upstream is unused here (history is imported, not captured
+    # live), but serve wants one; OpenAI keeps the stack free of Ollama.
+    command: >-
+      serve
+      --provider openai
+      --upstream https://api.openai.com
+      --postgres postgres://tapes:tapes@postgres:5432/tapes?sslmode=disable
+      --cassettes http://skills:9998/openapi
+      --cassette-refresh 10s
+    ports:
+      - "127.0.0.1:18081:8081"
+      - "127.0.0.1:18082:8082"
+    volumes:
+      - tapes-data:/data
+    networks:
+      default:
+        aliases:
+          - tapes.svc
+    depends_on:
+      postgres:
+        condition: service_healthy
+      skills:
+        condition: service_started
+
+volumes:
+  postgres-data:
+  tapes-data:
