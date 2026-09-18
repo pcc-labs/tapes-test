@@ -2,6 +2,8 @@ module github.com/pcc-labs/tapes-test
 
 go 1.24
 
+toolchain go1.25.13
+
 require github.com/charmbracelet/lipgloss v1.1.0
 
 require (

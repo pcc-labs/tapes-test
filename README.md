@@ -160,6 +160,25 @@ With an OpenAI key, the transcripts behind each skill go to OpenAI to write
 it, and session text is embedded with OpenAI for search. Everything else
 stays on your laptop. With `--ollama`, all of it does.
 
+## Security
+
+It runs on your machine and keeps to it. The tapes API listens on
+`127.0.0.1` only; postgres and the cassettes are not published at all; no
+container gets the Docker socket; the images are pinned by digest. The only
+outbound calls are to OpenAI, with your key, and only with a key set.
+
+Two things to know:
+
+- **A skill is written by a model, from your sessions.** Session text is
+  untrusted input to that model: anything an agent read (a web page, a
+  dependency, a pull request) could try to steer what the skill says. Read a
+  `SKILL.md` before you copy it into a skills directory, the same as any
+  generated code.
+- **Your transcripts go to OpenAI** for the skill and for search embeddings,
+  unless you use `--ollama`. See Privacy above.
+
+`govulncheck` is clean, and releases build with a pinned Go toolchain.
+
 ## License
 
 MIT. See [LICENSE](LICENSE).

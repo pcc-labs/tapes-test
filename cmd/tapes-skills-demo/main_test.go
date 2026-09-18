@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -43,5 +44,25 @@ func TestTruncateKeepsWholeCharacters(t *testing.T) {
 	}
 	if got := truncate("short", 48); got != "short" {
 		t.Errorf("truncate = %q", got)
+	}
+}
+
+func TestSlugDirIsOneDirectoryName(t *testing.T) {
+	cases := map[string]string{
+		"configure-shell-aliases": "configure-shell-aliases",
+		"../../../etc/cron.d/x":   "etc-cron-d-x",
+		"/absolute":               "absolute",
+		"..":                      "skill",
+		"":                        "skill",
+		"Mixed Case Skill":        "mixed-case-skill",
+	}
+	for in, want := range cases {
+		got := slugDir(in)
+		if got != want {
+			t.Errorf("slugDir(%q) = %q, want %q", in, got, want)
+		}
+		if strings.ContainsAny(got, `/\`) || got == ".." || strings.HasPrefix(got, ".") {
+			t.Errorf("slugDir(%q) = %q escapes its directory", in, got)
+		}
 	}
 }

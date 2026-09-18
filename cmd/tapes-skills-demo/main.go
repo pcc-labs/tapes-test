@@ -276,6 +276,26 @@ func each(n, limit int, fn func(i int) error) error {
 	return first
 }
 
+// slugDir is one directory name from a slug the server chose. A slug is
+// never a path: "../.." from a cassette that was tampered with, or simply
+// wrong, would otherwise write outside --out.
+func slugDir(slug string) string {
+	clean := strings.Map(func(r rune) rune {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9', r == '-', r == '_':
+			return r
+		case r >= 'A' && r <= 'Z':
+			return r + ('a' - 'A')
+		}
+		return '-'
+	}, slug)
+	clean = strings.Trim(clean, "-")
+	if clean == "" {
+		return "skill"
+	}
+	return truncate(clean, 80)
+}
+
 // generateError is the skills cassette declining or failing to write a
 // skill, as opposed to the file not landing on disk.
 type generateError struct{ err error }
@@ -294,7 +314,7 @@ func writeSkill(ctx context.Context, client *tapes.Client, out string, ids []str
 	if err != nil {
 		return "", err
 	}
-	dest := filepath.Join(out, skill.Slug, "SKILL.md")
+	dest := filepath.Join(out, slugDir(skill.Slug), "SKILL.md")
 	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
 		return "", err
 	}
