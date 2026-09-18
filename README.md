@@ -104,22 +104,21 @@ tapes-skills-demo sessions   # what was imported
 
 ## Or hand it to your agent
 
-Paste this into Codex or Claude Code:
+This repo ships [SKILL.md](SKILL.md), so your agent can run the whole thing
+without you narrating it:
 
-> Install and run tapes-skills-demo for me.
-> 1. `go install github.com/pcc-labs/tapes-test/cmd/tapes-skills-demo@latest`,
->    or if I have no Go,
->    `curl -fsSL https://raw.githubusercontent.com/pcc-labs/tapes-test/main/install.sh | sh`
-> 2. Run `tapes-skills-demo check`. If any line says FAIL, stop and tell
->    me what it says; do not work around it.
-> 3. Run `tapes-skills-demo`. It takes several minutes and prints progress
->    to stderr; do not time it out.
-> 4. Read every `tapes-skills/*/SKILL.md` and tell me which are worth
->    keeping and why.
-> 5. Run `tapes-skills-demo sessions`, pick two kinds of work I did more
->    than once, and for each run
->    `tapes-skills-demo skill $(tapes-skills-demo search -q "<that work>")`.
-> 6. Do not copy anything into my skills directory until I say so.
+```bash
+git clone https://github.com/pcc-labs/tapes-test ~/.claude/skills/tapes-skills-demo
+```
+
+Then ask for it by name: *"use the tapes-skills-demo skill and tell me what
+my Codex history says about how I work."* Codex reads the same file; put it
+wherever that agent keeps skills.
+
+Without installing anything, paste this instead:
+
+> Read https://raw.githubusercontent.com/pcc-labs/tapes-test/main/SKILL.md
+> and follow it against my Codex history.
 
 Every command exits non-zero with a one-line reason when it fails. Results
 go to stdout and progress to stderr, so the commands compose.
