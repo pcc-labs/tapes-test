@@ -7,6 +7,8 @@ skill.
 
 Codex today, on macOS or Linux.
 
+[Watch it run](https://www.loom.com/share/c6fc83675f66474fb763094a3c3bd11f)
+
 ## Prerequisites
 
 | | Why | Get it |
