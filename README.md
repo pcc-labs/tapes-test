@@ -1,4 +1,4 @@
-# tapes skills demo
+# tapes test
 
 One command on your laptop, and your own agent history tells you something:
 what you keep correcting, what you keep repeating, and a skill written from
@@ -26,7 +26,7 @@ Windows works through [WSL](https://learn.microsoft.com/windows/wsl/install).
 Start Docker Desktop, then:
 
 ```bash
-go install github.com/pcc-labs/tapes-skills-demo@latest
+go install github.com/pcc-labs/tapes-test/cmd/tapes-skills-demo@latest
 export OPENAI_API_KEY=sk-...   # or put it in a .env in the current directory
 tapes-skills-demo check
 ```
@@ -34,7 +34,7 @@ tapes-skills-demo check
 Without Go, take the prebuilt binary instead, which needs nothing installed:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/pcc-labs/tapes-skills-demo/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/pcc-labs/tapes-test/main/install.sh | sh
 ```
 
 `check` says whether a run would work and what to fix if not: Docker
@@ -110,7 +110,7 @@ This repo ships [SKILL.md](SKILL.md), so your agent can run the whole thing
 without you narrating it:
 
 ```bash
-git clone https://github.com/pcc-labs/tapes-skills-demo ~/.claude/skills/tapes-skills-demo
+git clone https://github.com/pcc-labs/tapes-test ~/.claude/skills/tapes-skills-demo
 ```
 
 Then ask for it by name: *"use the tapes-skills-demo skill and tell me what
@@ -119,7 +119,7 @@ wherever that agent keeps skills.
 
 Without installing anything, paste this instead:
 
-> Read https://raw.githubusercontent.com/pcc-labs/tapes-skills-demo/main/SKILL.md
+> Read https://raw.githubusercontent.com/pcc-labs/tapes-test/main/SKILL.md
 > and follow it against my Codex history.
 
 Every command exits non-zero with a one-line reason when it fails. Results
