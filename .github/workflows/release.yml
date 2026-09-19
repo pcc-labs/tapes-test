@@ -24,7 +24,7 @@ jobs:
           for target in darwin/arm64 darwin/amd64 linux/arm64 linux/amd64; do
             out="dist/tapes-skills-demo-${target%/*}-${target#*/}"
             CGO_ENABLED=0 GOOS="${target%/*}" GOARCH="${target#*/}" \
-              go build -trimpath -ldflags "-s -w -X main.version=${GITHUB_REF_NAME}" -o "$out" ./cmd/tapes-skills-demo
+              go build -trimpath -ldflags "-s -w -X main.version=${GITHUB_REF_NAME}" -o "$out" .
             (cd dist && sha256sum "$(basename "$out")" > "$(basename "$out").sha256")
           done
       - name: publish

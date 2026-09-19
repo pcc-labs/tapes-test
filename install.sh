@@ -1,12 +1,12 @@
 #!/bin/sh
 # Installs the latest tapes-skills-demo release. No Go needed.
 #
-#   curl -fsSL https://raw.githubusercontent.com/pcc-labs/tapes-test/main/install.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/pcc-labs/tapes-skills-demo/main/install.sh | sh
 #
 # TAPES_INSTALL_DIR picks the directory (default ~/.local/bin).
 set -eu
 
-repo="pcc-labs/tapes-test"
+repo="pcc-labs/tapes-skills-demo"
 os=$(uname -s | tr '[:upper:]' '[:lower:]')
 arch=$(uname -m)
 case "$arch" in

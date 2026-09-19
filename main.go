@@ -30,9 +30,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pcc-labs/tapes-test/internal/codex"
-	"github.com/pcc-labs/tapes-test/internal/stack"
-	"github.com/pcc-labs/tapes-test/internal/tapes"
+	"github.com/pcc-labs/tapes-skills-demo/internal/codex"
+	"github.com/pcc-labs/tapes-skills-demo/internal/stack"
+	"github.com/pcc-labs/tapes-skills-demo/internal/tapes"
 )
 
 const usage = `usage: tapes-skills-demo [command] [flags]

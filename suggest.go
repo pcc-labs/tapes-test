@@ -14,10 +14,10 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/pcc-labs/tapes-test/internal/codex"
-	"github.com/pcc-labs/tapes-test/internal/recommend"
-	"github.com/pcc-labs/tapes-test/internal/stack"
-	"github.com/pcc-labs/tapes-test/internal/tapes"
+	"github.com/pcc-labs/tapes-skills-demo/internal/codex"
+	"github.com/pcc-labs/tapes-skills-demo/internal/recommend"
+	"github.com/pcc-labs/tapes-skills-demo/internal/stack"
+	"github.com/pcc-labs/tapes-skills-demo/internal/tapes"
 )
 
 // corpus is everything derived about the imported sessions: the detector's

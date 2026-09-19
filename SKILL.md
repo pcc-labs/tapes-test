@@ -23,9 +23,9 @@ theirs to fix, and a run without them wastes several minutes.
 Not installed yet:
 
 ```bash
-go install github.com/pcc-labs/tapes-test/cmd/tapes-skills-demo@latest
+go install github.com/pcc-labs/tapes-skills-demo@latest
 # no Go on the machine:
-curl -fsSL https://raw.githubusercontent.com/pcc-labs/tapes-test/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/pcc-labs/tapes-skills-demo/main/install.sh | sh
 ```
 
 ## The run
