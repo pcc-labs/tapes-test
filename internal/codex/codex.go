@@ -31,19 +31,19 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/pcc-labs/tapes-test/internal/history"
 )
 
-// Record is one Claude-shaped transcript line.
-type Record map[string]any
+// HarnessID is what these sessions are filed under in tapes.
+const HarnessID = "codex"
 
-// Session is one converted rollout.
-type Session struct {
-	ID      string
-	Cwd     string
-	Version string
-	Model   string
-	Records []Record
-}
+// Record is one Claude-shaped transcript line, and Session one converted
+// rollout. Both are the shared shape every harness reader hands back.
+type (
+	Record  = history.Record
+	Session = history.Session
+)
 
 // Summary counts one run, in the order Render prints them.
 type Summary struct {
@@ -126,14 +126,14 @@ const autoReviewModel = "codex-auto-review"
 // Load converts every rollout under root modified in the window. Sessions
 // come back in path order; a resumed session appears once, from its last
 // rollout.
-func Load(root string, sinceDays int) ([]Session, Summary, error) {
+func Load(root string, sinceDays int) ([]history.Session, Summary, error) {
 	var summary Summary
 	paths, err := Rollouts(root, sinceDays)
 	if err != nil {
 		return nil, summary, err
 	}
 	index := map[string]int{}
-	var sessions []Session
+	var sessions []history.Session
 	for _, path := range paths {
 		f, err := os.Open(path)
 		if err != nil {
@@ -199,7 +199,7 @@ func Convert(r io.Reader, summary *Summary) (Session, bool) {
 		summary.SkippedEmpty++
 		return Session{}, false
 	}
-	return Session{ID: b.id, Cwd: b.cwd, Version: b.version, Model: b.model, Records: b.records}, true
+	return Session{Harness: HarnessID, ID: b.id, Cwd: b.cwd, Version: b.version, Model: b.model, Records: b.records}, true
 }
 
 // builder accumulates Claude-shaped records for one rollout. Every record
