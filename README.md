@@ -5,7 +5,7 @@ what you keep correcting, what you keep repeating, and a skill written from
 it. Nothing leaves the machine except the one model call that writes the
 skill.
 
-Codex today, on macOS or Linux.
+Codex and Claude Code, either or both, on macOS or Linux.
 
 [Watch it run](https://www.loom.com/share/c6fc83675f66474fb763094a3c3bd11f)
 
@@ -16,7 +16,8 @@ Codex today, on macOS or Linux.
 | **Docker**, running | The local tapes stack: postgres, tapes, and the skills and search cassettes. About 1.2 GB of images, a few GB of data, ports 18081 and 18082 on loopback. | [Docker Desktop](https://docs.docker.com/desktop/) |
 | **Go** 1.24+ | To install with `go install`, and to build from source. Skip it if you take the prebuilt binary below. | [go.dev/dl](https://go.dev/dl/) |
 | **An OpenAI key** | Writes the skills and embeds sessions for search. Skip it with `--ollama`. | [platform.openai.com/api-keys](https://platform.openai.com/api-keys) |
-| **Codex history** | What it reads: `~/.codex/sessions`, or `CODEX_HOME`. Nothing to do if you already use Codex. | [Codex CLI](https://developers.openai.com/codex/cli) |
+| **Codex history** | One of the two is enough. Read from `~/.codex/sessions`, or `CODEX_HOME`. | [Codex CLI](https://developers.openai.com/codex/cli) |
+| **Claude Code history** | The other. Read from `~/.claude/projects`, or `CLAUDE_CONFIG_DIR`. | [Claude Code](https://claude.com/claude-code) |
 | **Ollama** (optional) | With `--ollama`, writes the skills and embeds locally, so nothing leaves the machine. Install it natively on a Mac: the Docker one has no GPU. | [ollama.com/download](https://ollama.com/download) |
 
 Windows works through [WSL](https://learn.microsoft.com/windows/wsl/install).
@@ -38,7 +39,8 @@ curl -fsSL https://raw.githubusercontent.com/pcc-labs/tapes-test/main/install.sh
 ```
 
 `check` says whether a run would work and what to fix if not: Docker
-running, the key accepted, Codex history found.
+running, the key accepted, and which histories it found. It names Codex and
+Claude Code separately, and only wants one of them.
 
 ## Run
 
@@ -46,14 +48,19 @@ running, the key accepted, Codex history found.
 tapes-skills-demo
 ```
 
-It reads your last 30 days of Codex sessions, imports them into a local
-tapes stack, and ends with what your sessions look like. Takes a few
-minutes; your longest session sets the pace. If it is interrupted, run it
-again: it picks up where it stopped.
+It reads your last 30 days of Codex and Claude Code sessions, whichever of
+the two is on the machine, imports them into a local tapes stack, and ends
+with what your sessions look like. Takes a few minutes; your longest session
+sets the pace. If it is interrupted, run it again: it picks up where it
+stopped.
+
+Both are read by default. `--harness codex` or `--harness claude` reads one.
 
 ### The feedback you keep giving
 
-If you review UI with Codex's browser comments, they come first:
+If you review UI with Codex's browser comments, they come first. This one
+is Codex-only; Claude Code has nothing like it, and a machine with only
+Claude Code skips straight to the section below.
 
 ```
 Browser comments
@@ -114,13 +121,13 @@ git clone https://github.com/pcc-labs/tapes-test ~/.claude/skills/tapes-skills-d
 ```
 
 Then ask for it by name: *"use the tapes-skills-demo skill and tell me what
-my Codex history says about how I work."* Codex reads the same file; put it
+my agent history says about how I work."* Codex reads the same file; put it
 wherever that agent keeps skills.
 
 Without installing anything, paste this instead:
 
 > Read https://raw.githubusercontent.com/pcc-labs/tapes-test/main/SKILL.md
-> and follow it against my Codex history.
+> and follow it against my agent history.
 
 Every command exits non-zero with a one-line reason when it fails. Results
 go to stdout and progress to stderr, so the commands compose.
@@ -133,7 +140,7 @@ Every failure prints one line saying what to do. The ones a first run meets:
 | --- | --- |
 | `docker is installed but not running` | Start Docker Desktop and wait for it to finish starting. |
 | `OpenAI rejected OPENAI_API_KEY` | Fix the key. One exported in the shell wins over `.env`. |
-| `no Codex history at …` | Pass `--codex-root DIR`. `CODEX_HOME` is honoured. |
+| `no agent history found …` | Pass `--codex-root DIR` or `--claude-root DIR`. `CODEX_HOME` and `CLAUDE_CONFIG_DIR` are honoured. |
 | `ports 18081/18082 are taken` | `tapes-skills-demo down`, or stop what is listening there. |
 | `stale login for public.ecr.aws` | `docker logout public.ecr.aws` |
 | `command not found` after installing | The installer printed the PATH line to add. Open a new terminal after adding it. |
@@ -141,15 +148,18 @@ Every failure prints one line saying what to do. The ones a first run meets:
 | `lost contact with the tapes database` | Check Docker is still running, then run it again. |
 
 Anything else: `tapes-skills-demo down` and run it again. That only deletes
-this tool's containers and data, never your Codex history.
+this tool's containers and data, never the history it read.
 
 ## Options
 
 ```bash
-tapes-skills-demo --since-days 90   # default 30
-tapes-skills-demo --out DIR         # default tapes-skills
-tapes-skills-demo --yes             # write every suggestion without asking
-tapes-skills-demo down              # remove containers and data
+tapes-skills-demo --since-days 90    # default 30
+tapes-skills-demo --out DIR          # default tapes-skills
+tapes-skills-demo --harness claude   # one harness; default is both
+tapes-skills-demo --codex-root DIR   # default ~/.codex/sessions
+tapes-skills-demo --claude-root DIR  # default ~/.claude/projects
+tapes-skills-demo --yes              # write every suggestion without asking
+tapes-skills-demo down               # remove containers and data
 ```
 
 Safe to re-run.

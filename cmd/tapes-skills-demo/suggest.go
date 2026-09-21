@@ -476,12 +476,12 @@ func (c *corpus) write(ctx context.Context, client *tapes.Client, out string, ch
 func suggest(ctx context.Context, args []string) error {
 	fs := newFlags("suggest")
 	sinceDays := fs.Int("since-days", 30, "")
-	root := fs.String("codex-root", codex.DefaultRoot(), "")
+	roots := addHistoryFlags(fs)
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	client := tapes.New(stack.API, stack.Ingest)
-	c, err := detect(ctx, client, readFeedback(*root, *sinceDays))
+	c, err := detect(ctx, client, readFeedback(roots.codex, *sinceDays))
 	if err != nil {
 		return err
 	}
@@ -498,7 +498,7 @@ func skill(ctx context.Context, args []string) error {
 	fs := newFlags("skill")
 	out := fs.String("out", "tapes-skills", "")
 	sinceDays := fs.Int("since-days", 30, "")
-	root := fs.String("codex-root", codex.DefaultRoot(), "")
+	roots := addHistoryFlags(fs)
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -508,7 +508,7 @@ func skill(ctx context.Context, args []string) error {
 	}
 	client := tapes.New(stack.API, stack.Ingest)
 	if _, err := strconv.Atoi(fs.Args()[0]); err == nil {
-		c, err := detect(ctx, client, readFeedback(*root, *sinceDays))
+		c, err := detect(ctx, client, readFeedback(roots.codex, *sinceDays))
 		if err != nil {
 			return err
 		}
@@ -538,9 +538,13 @@ func skill(ctx context.Context, args []string) error {
 	return nil
 }
 
-// readFeedback is the browser comments in the window. Unreadable history
-// means no comments section, not a failed run.
+// readFeedback is the browser comments in the window. They are a Codex
+// feature, so a machine with only Claude Code has none and says nothing
+// about it. Unreadable history means no comments section, not a failed run.
 func readFeedback(root string, sinceDays int) codex.Feedback {
+	if _, err := os.Stat(root); err != nil {
+		return codex.Feedback{}
+	}
 	fb, err := codex.BrowserComments(root, sinceDays)
 	if err != nil {
 		note("could not read browser comments from %s: %v", root, err)

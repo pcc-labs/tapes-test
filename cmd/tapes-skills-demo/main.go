@@ -1,7 +1,11 @@
-// tapes-skills-demo turns a month of Codex history into recommended skills.
+// tapes-skills-demo turns a month of agent history into recommended skills.
+//
+// It reads Codex and Claude Code, whichever of the two is on the machine,
+// and both when both are.
 //
 //	tapes-skills-demo                  import, derive, write ./tapes-skills
 //	tapes-skills-demo --since-days 90  a wider window
+//	tapes-skills-demo --harness claude only one of the two
 //	tapes-skills-demo --ollama         the same, with local models only
 //	tapes-skills-demo sessions         what was imported
 //	tapes-skills-demo search "query"   semantic search over the imported work
@@ -30,7 +34,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pcc-labs/tapes-test/internal/codex"
+	"github.com/pcc-labs/tapes-test/internal/history"
 	"github.com/pcc-labs/tapes-test/internal/stack"
 	"github.com/pcc-labs/tapes-test/internal/tapes"
 )
@@ -38,7 +42,7 @@ import (
 const usage = `usage: tapes-skills-demo [command] [flags]
 
 commands:
-  run        import Codex history, derive it, write skills (default)
+  run        import your agent history, derive it, write skills (default)
   check      say whether a run would work, and what to fix if not
   sessions   list imported sessions
   search     semantic search over imported sessions
@@ -47,16 +51,20 @@ commands:
   down       stop the stack and delete its data
   version    print the version
 
+Codex and Claude Code are both read, whichever of the two is on the machine.
+
 run flags:
-  --since-days N   rollouts modified in the last N days (default 30; 0 = all)
-  --out DIR        where <slug>/SKILL.md is written (default tapes-skills)
-  --codex-root DIR Codex sessions tree (default ~/.codex/sessions)
-  --ollama         use a local Ollama instead of OpenAI: nothing leaves the
-                   machine, but skills are slower and rougher
-  --yes            write every suggested skill without asking
+  --since-days N    sessions modified in the last N days (default 30; 0 = all)
+  --out DIR         where <slug>/SKILL.md is written (default tapes-skills)
+  --harness NAME    read only one: codex, or claude (default both)
+  --codex-root DIR  Codex sessions tree (default ~/.codex/sessions)
+  --claude-root DIR Claude Code projects tree (default ~/.claude/projects)
+  --ollama          use a local Ollama instead of OpenAI: nothing leaves the
+                    machine, but skills are slower and rougher
+  --yes             write every suggested skill without asking
 
 check flags:
-  --codex-root DIR, --ollama   as for run
+  --harness, --codex-root, --claude-root, --ollama   as for run
 
 sessions flags:
   --limit N        rows to print (default 50; 0 = all)
@@ -66,7 +74,7 @@ search flags:
   -q               print only session ids, one per line, best first
 
 suggest flags:
-  --since-days N, --codex-root DIR   as for run
+  --since-days N, --codex-root DIR, --claude-root DIR   as for run
 
 skill flags:
   --out DIR        where <slug>/SKILL.md is written (default tapes-skills)
@@ -133,7 +141,7 @@ func run(ctx context.Context, args []string) error {
 	fs := newFlags("run")
 	sinceDays := fs.Int("since-days", 30, "")
 	out := fs.String("out", "tapes-skills", "")
-	root := fs.String("codex-root", codex.DefaultRoot(), "")
+	roots := addHistoryFlags(fs)
 	ollama := fs.Bool("ollama", false, "")
 	yes := fs.Bool("yes", false, "")
 	if err := fs.Parse(args); err != nil {
@@ -145,22 +153,27 @@ func run(ctx context.Context, args []string) error {
 			return err
 		}
 	}
-	if _, err := os.Stat(*root); err != nil {
-		return fmt.Errorf("no Codex history at %s. If Codex keeps it elsewhere, pass --codex-root DIR", *root)
+	found, err := roots.present()
+	if err != nil {
+		return err
 	}
 	st, err := stack.New(*ollama)
 	if err != nil {
 		return err
 	}
 
-	say("1/5 reading the last %d day(s) of Codex history", *sinceDays)
-	sessions, summary, err := codex.Load(*root, *sinceDays)
-	if err != nil {
-		return err
+	say("1/5 reading the last %d day(s) of history from %s", *sinceDays, names(found))
+	var sessions []history.Session
+	for _, src := range found {
+		read, line, err := src.load(src.root, *sinceDays)
+		if err != nil {
+			return err
+		}
+		note("%s: %s", src.name, line)
+		sessions = append(sessions, read...)
 	}
-	note("%s", summary.Render())
 	if len(sessions) == 0 {
-		return fmt.Errorf("nothing to import from %s; widen --since-days or check --codex-root", *root)
+		return fmt.Errorf("nothing to import from %s; widen --since-days, or point at the history with --codex-root / --claude-root", roots.paths())
 	}
 
 	say("2/5 starting tapes (postgres, tapes, derive workers, skills and search cassettes)")
@@ -191,7 +204,7 @@ func run(ctx context.Context, args []string) error {
 	subject := "local:" + username()
 	for i, s := range sessions {
 		err := client.UploadTranscript(ctx, tapes.Transcript{
-			HarnessID:        "codex",
+			HarnessID:        s.Harness,
 			HarnessSessionID: s.ID,
 			HarnessVersion:   s.Version,
 			Cwd:              s.Cwd,
@@ -211,7 +224,7 @@ func run(ctx context.Context, args []string) error {
 	}
 
 	say("5/5 what your sessions look like")
-	c, err := detect(ctx, client, readFeedback(*root, *sinceDays))
+	c, err := detect(ctx, client, readFeedback(roots.codex, *sinceDays))
 	if err != nil {
 		return err
 	}
@@ -355,7 +368,7 @@ func checkOpenAIKey(ctx context.Context) error {
 // fails if any does not hold.
 func check(ctx context.Context, args []string) error {
 	fs := newFlags("check")
-	root := fs.String("codex-root", codex.DefaultRoot(), "")
+	roots := addHistoryFlags(fs)
 	ollama := fs.Bool("ollama", false, "")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -376,11 +389,32 @@ func check(ctx context.Context, args []string) error {
 	} else {
 		report("openai key", checkOpenAIKey(ctx), "set and accepted")
 	}
-	paths, err := codex.Rollouts(*root, 30)
-	if err == nil && len(paths) == 0 {
-		err = fmt.Errorf("no sessions from the last 30 days under %s; try --since-days 90 when you run", *root)
+	// Each history is reported on its own line, and only finding none of
+	// them fails the check: one of the two is enough to run.
+	all, err := roots.all()
+	if err != nil {
+		return err
 	}
-	report("codex history", err, fmt.Sprintf("%d session file(s) from the last 30 days in %s", len(paths), *root))
+	histories := 0
+	for _, src := range all {
+		name := strings.ToLower(src.name) + " history"
+		if _, err := os.Stat(src.root); err != nil {
+			fmt.Printf("%s     %s: not on this machine (%s)\n", outUI.dim.Render("--"), outUI.strong.Render(name), src.root)
+			continue
+		}
+		paths, err := src.files(src.root, 30)
+		if err == nil && len(paths) == 0 {
+			err = fmt.Errorf("no sessions from the last 30 days under %s; try --since-days 90 when you run", src.root)
+		}
+		if err == nil {
+			histories++
+		}
+		report(name, err, fmt.Sprintf("%d session file(s) from the last 30 days in %s", len(paths), src.root))
+	}
+	if histories == 0 {
+		failed++
+		fmt.Printf("%s  %s: nothing to read from %s\n", outUI.badTag.Render("FAIL"), outUI.strong.Render("history"), roots.paths())
+	}
 	client := tapes.New(stack.API, stack.Ingest)
 	if client.Ping(ctx) {
 		report("stack", nil, "already up at "+stack.API)

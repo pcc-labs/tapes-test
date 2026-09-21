@@ -1,14 +1,18 @@
 ---
 name: tapes-skills-demo
-description: Use when the user wants to know what their Codex history says about how they work, or asks for skills from their own sessions. Covers "what do I keep correcting", "what do I keep repeating", "make me a skill from my sessions", "search my past sessions", and running tapes-skills-demo. Everything stays on their machine.
+description: Use when the user wants to know what their Codex or Claude Code history says about how they work, or asks for skills from their own sessions. Covers "what do I keep correcting", "what do I keep repeating", "make me a skill from my sessions", "search my past sessions", and running tapes-skills-demo. Everything stays on their machine.
 ---
 
-# Skills from a person's Codex history
+# Skills from a person's agent history
 
-`tapes-skills-demo` reads the last 30 days of Codex sessions on this
-machine, imports them into a local tapes stack, and reports what the
-sessions look like: browser comments the person left reviewing UI, work
-they repeated, and skills either could become.
+`tapes-skills-demo` reads the last 30 days of Codex and Claude Code sessions
+on this machine, imports them into a local tapes stack, and reports what the
+sessions look like: browser comments the person left reviewing UI, work they
+repeated, and skills either could become.
+
+Both harnesses are read by default, and one of the two is enough. `check`
+reports them separately, so its output says which the person actually has.
+Pass `--harness codex` or `--harness claude` only when they ask for one.
 
 ## Before running anything
 
@@ -47,6 +51,8 @@ it stopped and re-imports nothing.
 - **Browser comments** come first when the person reviews UI in Codex's
   browser: how many, on which pages, the latest in their own words.
   Suggestion 1 is then a skill of the rules those comments keep restating.
+  This section is Codex-only, so it is absent on a Claude Code machine, and
+  that is not a failure.
 - **Suggestions** are numbered. `new` is a skill that does not exist yet;
   `have it` is work a skill in their library already covers.
 - **Written skills** land in `tapes-skills/<slug>/SKILL.md`.
@@ -77,4 +83,4 @@ minute before trusting an empty result.
   key.
 - **A wider window**: `--since-days 90` when 30 days holds nothing repeated.
 - **Cleanup**: `tapes-skills-demo down` removes the containers and their
-  data, never the Codex history.
+  data, never the history it read.
