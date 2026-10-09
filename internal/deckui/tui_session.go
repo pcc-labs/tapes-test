@@ -9,6 +9,8 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"github.com/papercomputeco/tapes/pkg/deck"
+
+	"github.com/pcc-labs/tapes-test/internal/spend"
 )
 
 func (m deckModel) viewSession() string {
@@ -158,6 +160,17 @@ func (m deckModel) renderSessionMetrics() []string {
 			value:     countValue,
 			secondary: countSecondary,
 		},
+	}
+	if routable != nil && !m.inTurn {
+		r := routable[m.detail.Summary.ID]
+		if r == nil {
+			r = &spend.SessionSpend{}
+		}
+		metrics = append(metrics, metricData{
+			label:     "ROUTABLE",
+			value:     formatCost(r.Routable),
+			secondary: fmt.Sprintf("%d calls · %s", r.Calls, routableShare(r.Routable, r.FrontierCost)),
+		})
 	}
 
 	// Add comparison data if we have overview stats

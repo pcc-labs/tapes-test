@@ -10,6 +10,7 @@
 //	tapes-test sessions         what was imported
 //	tapes-test search "query"   semantic search over the imported work
 //	tapes-test suggest          show the clusters without generating
+//	tapes-test spend            frontier spend that could move to cheaper models
 //	tapes-test down             stop the stack and delete its data
 //
 // Needs Docker and an OpenAI key (OPENAI_API_KEY, or a .env in the current
@@ -36,6 +37,7 @@ import (
 
 	"github.com/pcc-labs/tapes-test/internal/deckui"
 	"github.com/pcc-labs/tapes-test/internal/history"
+	"github.com/pcc-labs/tapes-test/internal/spend"
 	"github.com/pcc-labs/tapes-test/internal/stack"
 	"github.com/pcc-labs/tapes-test/internal/tapes"
 )
@@ -50,6 +52,7 @@ commands:
   suggest    show what your sessions look like and the skills they could be
   skill      write a skill: by suggestion number, or from session ids
   deck       browse imported sessions in a terminal dashboard
+  spend      RoutableSpend: frontier spend that could move to cheaper models
   down       stop the stack and delete its data
   version    print the version
 
@@ -91,6 +94,12 @@ deck flags:
   --theme NAME     dark or light (default: follow the terminal)
   --api-target URL another tapes API (default the stack, http://127.0.0.1:18081)
 
+spend flags:
+  --since-days N      calls from the last N days (default 0 = all)
+  --small-output N    most output tokens for a read-only call to route (default 400)
+  --pricing FILE      JSON price overrides per model, as for deck
+  --json              machine-readable output
+
   tapes-test skill 1 3
   tapes-test skill $(tapes-test search -q "how I fixed auth")
 `
@@ -123,6 +132,8 @@ func main() {
 		err = check(ctx, args)
 	case "deck":
 		err = deckCmd(ctx, args)
+	case "spend":
+		err = spendCmd(ctx, args)
 	case "down":
 		err = down(ctx)
 	case "version", "--version":
@@ -694,5 +705,29 @@ func deckCmd(ctx context.Context, args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	if o.APITarget == stack.API {
+		o.Routable = loadRoutable(ctx, o.Pricing)
+	}
 	return deckui.Run(ctx, o)
+}
+
+// loadRoutable computes RoutableSpend by session for the deck's ROUTABLE
+// tiles. Only the stack has a database to read, so another --api-target
+// gets no tiles. A failure costs the tiles, not the deck: the preflight
+// that follows says what is wrong with the stack, if anything is.
+func loadRoutable(ctx context.Context, pricingPath string) map[string]*spend.SessionSpend {
+	table, err := spend.LoadPricing(pricingPath)
+	if err != nil {
+		note("no ROUTABLE tile: %v", err)
+		return nil
+	}
+	st, err := stack.New(false)
+	if err != nil {
+		return nil
+	}
+	calls, err := loadCalls(ctx, st, time.Time{})
+	if err != nil {
+		return nil
+	}
+	return spend.Compute(calls, spend.Options{Pricing: table}).BySession
 }

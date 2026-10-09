@@ -268,17 +268,31 @@ func (s *Stack) Down(ctx context.Context) error {
 	return nil
 }
 
-// QueueDepth is how many sessions still wait for derivation. Postgres is
-// not published on the host, so this goes through the container.
-func (s *Stack) QueueDepth(ctx context.Context) (int, error) {
-	cmd := s.cmd(ctx, "exec", "-T", "postgres", "psql", "-qtA", "-U", "tapes", "-d", "tapes",
-		"-c", "select count(*) from derive_queue")
+// PSQL runs one statement against the stack's database and returns what
+// it printed, one row per line, columns separated by |. Postgres is not
+// published on the host, so this goes through the container.
+func (s *Stack) PSQL(ctx context.Context, sql string) (string, error) {
+	cmd := s.cmd(ctx, "exec", "-T", "postgres", "psql", "-qtA", "-U", "tapes", "-d", "tapes", "-v", "ON_ERROR_STOP=1", "-c", sql)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
 	out, err := cmd.Output()
+	if err != nil {
+		if msg := strings.TrimSpace(stderr.String()); msg != "" {
+			return "", fmt.Errorf("psql: %s", lastLine([]byte(msg)))
+		}
+		return "", err
+	}
+	return string(out), nil
+}
+
+// QueueDepth is how many sessions still wait for derivation.
+func (s *Stack) QueueDepth(ctx context.Context) (int, error) {
+	out, err := s.PSQL(ctx, "select count(*) from derive_queue")
 	if err != nil {
 		return 0, err
 	}
 	var n int
-	if _, err := fmt.Sscan(strings.TrimSpace(string(out)), &n); err != nil {
+	if _, err := fmt.Sscan(strings.TrimSpace(out), &n); err != nil {
 		return 0, fmt.Errorf("unexpected psql output %q", out)
 	}
 	return n, nil
