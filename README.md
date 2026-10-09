@@ -118,6 +118,8 @@ tapes-test sessions   # what was imported
 tapes-test deck
 ```
 
+![tapes-test deck: an overview of spend and sessions, then one session turn by turn](docs/deck.gif)
+
 A terminal dashboard over everything imported: spend, tokens, and time by
 model, a sortable session list, and each session turn by turn. `enter`
 drills in, `h` backs out, `p` changes the period, `q` quits. `--since 7d`,
