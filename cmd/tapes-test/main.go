@@ -37,6 +37,7 @@ import (
 
 	"github.com/pcc-labs/tapes-test/internal/deckui"
 	"github.com/pcc-labs/tapes-test/internal/history"
+	"github.com/pcc-labs/tapes-test/internal/spend"
 	"github.com/pcc-labs/tapes-test/internal/stack"
 	"github.com/pcc-labs/tapes-test/internal/tapes"
 )
@@ -704,5 +705,29 @@ func deckCmd(ctx context.Context, args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	if o.APITarget == stack.API {
+		o.Routable = loadRoutable(ctx, o.Pricing)
+	}
 	return deckui.Run(ctx, o)
+}
+
+// loadRoutable computes RoutableSpend by session for the deck's ROUTABLE
+// tiles. Only the stack has a database to read, so another --api-target
+// gets no tiles. A failure costs the tiles, not the deck: the preflight
+// that follows says what is wrong with the stack, if anything is.
+func loadRoutable(ctx context.Context, pricingPath string) map[string]*spend.SessionSpend {
+	table, err := spend.LoadPricing(pricingPath)
+	if err != nil {
+		note("no ROUTABLE tile: %v", err)
+		return nil
+	}
+	st, err := stack.New(false)
+	if err != nil {
+		return nil
+	}
+	calls, err := loadCalls(ctx, st, time.Time{})
+	if err != nil {
+		return nil
+	}
+	return spend.Compute(calls, spend.Options{Pricing: table}).BySession
 }

@@ -173,6 +173,10 @@ func (m deckModel) viewMetrics(stats deckOverviewStats) string {
 		},
 	}
 
+	if stats.RoutableKnown {
+		metrics = append(metrics, metricData{label: "ROUTABLE", value: formatCost(stats.Routable)})
+	}
+
 	// Add comparison data if available
 	if m.overview != nil && m.overview.PreviousPeriod != nil {
 		prev := m.overview.PreviousPeriod
@@ -291,6 +295,9 @@ func (m deckModel) viewMetrics(stats deckOverviewStats) string {
 		formatDuration(avgTime) + " avg",
 		fmt.Sprintf("%d avg", avgTurns),
 		fmt.Sprintf("%d/%d complete", stats.Completed, stats.TotalSessions),
+	}
+	if stats.RoutableKnown {
+		avgValues = append(avgValues, routableShare(stats.Routable, stats.RoutableFrontier))
 	}
 	avgLine := make([]string, 0)
 	for i, val := range avgValues {

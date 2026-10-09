@@ -128,6 +128,13 @@ drills in, `h` backs out, `p` changes the period, `q` quits. `--since 7d`,
 It reads the stack on 127.0.0.1:18081, so run `tapes-test` first. Any other
 tapes API works with `--api-target URL`.
 
+Reading the stack, the deck also shows a **ROUTABLE** tile: the
+[RoutableSpend](#what-could-run-on-a-cheaper-model) of the sessions on
+screen, as dollars and a share of their frontier spend. It follows the
+period and filters, and on a session page it counts that session's
+routable calls. Another `--api-target` has no database to compute it from,
+so the tile is left out there.
+
 ## What could run on a cheaper model
 
 ```bash

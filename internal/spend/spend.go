@@ -148,8 +148,17 @@ type Result struct {
 	Routable          float64
 	BySignal          map[Signal]*Bucket
 	ByModel           map[string]*Bucket // by normalized frontier model
-	NotWorthSwitching int                // candidates the switch cost ruled out
-	Unpriced          map[string]int     // calls skipped, by model
+	BySession         map[string]*SessionSpend
+	NotWorthSwitching int            // candidates the switch cost ruled out
+	Unpriced          map[string]int // calls skipped, by model
+}
+
+// SessionSpend is one session's share, so a view that filters sessions
+// can total only the ones it shows.
+type SessionSpend struct {
+	FrontierCost float64
+	Routable     float64
+	Calls        int // routable calls
 }
 
 // RoutableShare is Routable as a fraction of FrontierCost.
@@ -190,10 +199,11 @@ func Compute(calls []Call, o Options) Result {
 	})
 
 	r := Result{
-		Calls:    len(calls),
-		BySignal: map[Signal]*Bucket{},
-		ByModel:  map[string]*Bucket{},
-		Unpriced: map[string]int{},
+		Calls:     len(calls),
+		BySignal:  map[Signal]*Bucket{},
+		ByModel:   map[string]*Bucket{},
+		BySession: map[string]*SessionSpend{},
+		Unpriced:  map[string]int{},
 	}
 	type thread struct{ session, id string }
 	warm := map[thread]string{} // thread -> target model holding a warm cache
@@ -213,6 +223,12 @@ func Compute(calls []Call, o Options) Result {
 			continue
 		}
 		r.FrontierCost += spent
+		session := r.BySession[c.SessionID]
+		if session == nil {
+			session = &SessionSpend{}
+			r.BySession[c.SessionID] = session
+		}
+		session.FrontierCost += spent
 		s, ok := Classify(c, o.SmallOutput)
 		if !ok {
 			continue
@@ -236,6 +252,8 @@ func Compute(calls []Call, o Options) Result {
 		}
 		warm[t] = to
 		r.Routable += saved
+		session.Routable += saved
+		session.Calls++
 		for _, b := range []*Bucket{bucket(r.BySignal, s), bucket(r.ByModel, model)} {
 			b.Calls++
 			if switched {

@@ -19,6 +19,8 @@ import (
 
 	"github.com/papercomputeco/tapes/pkg/deck"
 	"github.com/papercomputeco/tapes/pkg/sessions"
+
+	"github.com/pcc-labs/tapes-test/internal/spend"
 )
 
 const sortDirDesc = "desc"
@@ -28,6 +30,10 @@ var (
 	brandTitle      = "tapes-test deck"
 	brandBreadcrumb = "tapes"
 )
+
+// routable is RoutableSpend by session id, or nil when the deck reads an
+// API it has no database for. Set once in Run, before the TUI starts.
+var routable map[string]*spend.SessionSpend
 
 // Options are the deck's flags. Empty strings take the defaults.
 type Options struct {
@@ -43,6 +49,10 @@ type Options struct {
 	Session   string // open straight into one session
 	Refresh   uint   // auto-refresh seconds, 0 to disable
 	Theme     string // dark|light, auto-detected when empty
+
+	// Routable is RoutableSpend by session id. Nil hides the ROUTABLE
+	// tiles; a non-nil empty map shows them at $0.00.
+	Routable map[string]*spend.SessionSpend
 }
 
 // Run checks the API answers, then hands the terminal to the TUI until the
@@ -60,6 +70,8 @@ func Run(ctx context.Context, o Options) error {
 	default:
 		return fmt.Errorf("invalid --theme value %q: expected dark or light", o.Theme)
 	}
+
+	routable = o.Routable
 
 	pricing, err := sessions.LoadPricing(o.Pricing)
 	if err != nil {

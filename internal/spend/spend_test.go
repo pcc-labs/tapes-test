@@ -138,6 +138,13 @@ func TestComputeChargesTheSwitchOnce(t *testing.T) {
 	if !near(r.RoutableShare(), r.Routable/frontier) {
 		t.Errorf("RoutableShare = %v", r.RoutableShare())
 	}
+	// Session s holds every frontier call; t holds none, so it has no row.
+	if s := r.BySession["s"]; s == nil || s.Calls != 3 || !near(s.Routable, r.Routable) || !near(s.FrontierCost, frontier) {
+		t.Errorf("BySession[s] = %+v", s)
+	}
+	if r.BySession["t"] != nil {
+		t.Errorf("BySession[t] = %+v, want none", r.BySession["t"])
+	}
 }
 
 func TestComputeSkipsWhenTheSwitchEatsTheSavings(t *testing.T) {

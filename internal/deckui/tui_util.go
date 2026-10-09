@@ -559,6 +559,13 @@ type deckOverviewStats struct {
 	Failed        int
 	Abandoned     int
 	CostByModel   map[string]deck.ModelCost
+
+	// RoutableSpend over the same sessions; RoutableKnown is false when
+	// the deck has no database to compute it from.
+	RoutableKnown    bool
+	Routable         float64
+	RoutableFrontier float64
+	RoutableCalls    int
 }
 
 func summarizeSessions(sessions []deck.SessionSummary) deckOverviewStats {
@@ -590,7 +597,14 @@ func summarizeSessions(sessions []deck.SessionSummary) deckOverviewStats {
 		modelCost.TotalCost += session.TotalCost
 		modelCost.SessionCount++
 		stats.CostByModel[session.Model] = modelCost
+
+		if r := routable[session.ID]; r != nil {
+			stats.Routable += r.Routable
+			stats.RoutableFrontier += r.FrontierCost
+			stats.RoutableCalls += r.Calls
+		}
 	}
+	stats.RoutableKnown = routable != nil
 	if stats.TotalSessions > 0 {
 		stats.SuccessRate = float64(stats.Completed) / float64(stats.TotalSessions)
 	}
@@ -1047,4 +1061,13 @@ func truncateString(text string, width int) string {
 		result = test
 	}
 	return result
+}
+
+// routableShare is routable spend as a share of the frontier spend it came
+// from, the line under a ROUTABLE tile.
+func routableShare(routable, frontier float64) string {
+	if frontier <= 0 {
+		return "no frontier spend"
+	}
+	return fmt.Sprintf("%.1f%% of frontier", 100*routable/frontier)
 }

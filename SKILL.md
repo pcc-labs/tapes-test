@@ -70,7 +70,7 @@ tapes-test skill 1 3                    # write suggestions by number
 tapes-test sessions                     # what was imported
 tapes-test search "how I fixed auth"    # semantic search over the sessions
 tapes-test skill $(tapes-test search -q "how I fixed auth")
-tapes-test deck                         # terminal dashboard over the sessions
+tapes-test deck                         # terminal dashboard over the sessions, with a ROUTABLE tile
 tapes-test spend                        # frontier spend that could move to a cheaper model
 ```
 
