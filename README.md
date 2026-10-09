@@ -2,8 +2,9 @@
 
 One command on your laptop, and your own agent history tells you something:
 what you keep correcting, what you keep repeating, and a skill written from
-it. Nothing leaves the machine except the one model call that writes the
-skill.
+it. Then `tapes-test deck` lets you browse all of it: what each session
+cost, how long it ran, and every turn in it. Nothing leaves the machine
+except the model calls that write skills and embed sessions for search.
 
 Codex and Claude Code, either or both, on macOS or Linux.
 
