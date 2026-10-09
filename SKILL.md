@@ -1,11 +1,11 @@
 ---
-name: tapes-skills-demo
-description: Use when the user wants to know what their Codex or Claude Code history says about how they work, or asks for skills from their own sessions. Covers "what do I keep correcting", "what do I keep repeating", "make me a skill from my sessions", "search my past sessions", and running tapes-skills-demo. Everything stays on their machine.
+name: tapes-test
+description: Use when the user wants to know what their Codex or Claude Code history says about how they work, or asks for skills from their own sessions. Covers "what do I keep correcting", "what do I keep repeating", "make me a skill from my sessions", "search my past sessions", "show me my sessions in a dashboard", and running tapes-test. Everything stays on their machine.
 ---
 
 # Skills from a person's agent history
 
-`tapes-skills-demo` reads the last 30 days of Codex and Claude Code sessions
+`tapes-test` reads the last 30 days of Codex and Claude Code sessions
 on this machine, imports them into a local tapes stack, and reports what the
 sessions look like: browser comments the person left reviewing UI, work they
 repeated, and skills either could become.
@@ -17,7 +17,7 @@ Pass `--harness codex` or `--harness claude` only when they ask for one.
 ## Before running anything
 
 ```bash
-tapes-skills-demo check
+tapes-test check
 ```
 
 Every line says `ok` or `FAIL`. **On any FAIL, stop and tell the user what
@@ -27,7 +27,7 @@ theirs to fix, and a run without them wastes several minutes.
 Not installed yet:
 
 ```bash
-go install github.com/pcc-labs/tapes-test/cmd/tapes-skills-demo@latest
+go install github.com/pcc-labs/tapes-test/cmd/tapes-test@latest
 # no Go on the machine:
 curl -fsSL https://raw.githubusercontent.com/pcc-labs/tapes-test/main/install.sh | sh
 ```
@@ -35,7 +35,7 @@ curl -fsSL https://raw.githubusercontent.com/pcc-labs/tapes-test/main/install.sh
 ## The run
 
 ```bash
-tapes-skills-demo
+tapes-test
 ```
 
 Several minutes; the longest session sets the pace. **Do not time it out.**
@@ -65,12 +65,16 @@ say plainly when one is generic or wrong. **Never copy a skill into
 ## Without a full run
 
 ```bash
-tapes-skills-demo suggest                      # the same report, writing nothing
-tapes-skills-demo skill 1 3                    # write suggestions by number
-tapes-skills-demo sessions                     # what was imported
-tapes-skills-demo search "how I fixed auth"    # semantic search over the sessions
-tapes-skills-demo skill $(tapes-skills-demo search -q "how I fixed auth")
+tapes-test suggest                      # the same report, writing nothing
+tapes-test skill 1 3                    # write suggestions by number
+tapes-test sessions                     # what was imported
+tapes-test search "how I fixed auth"    # semantic search over the sessions
+tapes-test skill $(tapes-test search -q "how I fixed auth")
+tapes-test deck                         # terminal dashboard over the sessions
 ```
+
+`deck` takes over the terminal until the user presses `q`, so do not run it
+yourself: give the user the command to run.
 
 `search -q` prints session ids, which is what `skill` takes, so the two
 compose. Search fills in the background: right after a first run, wait a
@@ -82,5 +86,5 @@ minute before trusting an empty result.
   and to embed for search. `--ollama` keeps everything local and needs no
   key.
 - **A wider window**: `--since-days 90` when 30 days holds nothing repeated.
-- **Cleanup**: `tapes-skills-demo down` removes the containers and their
+- **Cleanup**: `tapes-test down` removes the containers and their
   data, never the history it read.

@@ -1,16 +1,16 @@
-// tapes-skills-demo turns a month of agent history into recommended skills.
+// tapes-test turns a month of agent history into recommended skills.
 //
 // It reads Codex and Claude Code, whichever of the two is on the machine,
 // and both when both are.
 //
-//	tapes-skills-demo                  import, derive, write ./tapes-skills
-//	tapes-skills-demo --since-days 90  a wider window
-//	tapes-skills-demo --harness claude only one of the two
-//	tapes-skills-demo --ollama         the same, with local models only
-//	tapes-skills-demo sessions         what was imported
-//	tapes-skills-demo search "query"   semantic search over the imported work
-//	tapes-skills-demo suggest          show the clusters without generating
-//	tapes-skills-demo down             stop the stack and delete its data
+//	tapes-test                  import, derive, write ./tapes-skills
+//	tapes-test --since-days 90  a wider window
+//	tapes-test --harness claude only one of the two
+//	tapes-test --ollama         the same, with local models only
+//	tapes-test sessions         what was imported
+//	tapes-test search "query"   semantic search over the imported work
+//	tapes-test suggest          show the clusters without generating
+//	tapes-test down             stop the stack and delete its data
 //
 // Needs Docker and an OpenAI key (OPENAI_API_KEY, or a .env in the current
 // directory). Everything runs on this machine; the outbound calls are skill
@@ -34,12 +34,13 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pcc-labs/tapes-test/internal/deckui"
 	"github.com/pcc-labs/tapes-test/internal/history"
 	"github.com/pcc-labs/tapes-test/internal/stack"
 	"github.com/pcc-labs/tapes-test/internal/tapes"
 )
 
-const usage = `usage: tapes-skills-demo [command] [flags]
+const usage = `usage: tapes-test [command] [flags]
 
 commands:
   run        import your agent history, derive it, write skills (default)
@@ -48,6 +49,7 @@ commands:
   search     semantic search over imported sessions
   suggest    show what your sessions look like and the skills they could be
   skill      write a skill: by suggestion number, or from session ids
+  deck       browse imported sessions in a terminal dashboard
   down       stop the stack and delete its data
   version    print the version
 
@@ -80,8 +82,17 @@ skill flags:
   --out DIR        where <slug>/SKILL.md is written (default tapes-skills)
   --since-days N   the window the suggestion numbers came from (default 30)
 
-  tapes-skills-demo skill 1 3
-  tapes-skills-demo skill $(tapes-skills-demo search -q "how I fixed auth")
+deck flags:
+  --since D        look back this long, e.g. 24h (default 30 days)
+  --from, --to     a time window instead: YYYY-MM-DD or RFC3339
+  --sort KEY       cost, date, tokens, or duration (default date)
+  --model, --status, --project   filter the session list
+  --session ID     open straight into one session
+  --theme NAME     dark or light (default: follow the terminal)
+  --api-target URL another tapes API (default the stack, http://127.0.0.1:18081)
+
+  tapes-test skill 1 3
+  tapes-test skill $(tapes-test search -q "how I fixed auth")
 `
 
 // version is set by the release build.
@@ -110,6 +121,8 @@ func main() {
 		err = skill(ctx, args)
 	case "check":
 		err = check(ctx, args)
+	case "deck":
+		err = deckCmd(ctx, args)
 	case "down":
 		err = down(ctx)
 	case "version", "--version":
@@ -235,7 +248,7 @@ func run(ctx context.Context, args []string) error {
 	}
 	if len(chosen) == 0 {
 		if len(c.suggestions) > 0 {
-			note("nothing written; `tapes-skills-demo skill N` writes one later")
+			note("nothing written; `tapes-test skill N` writes one later")
 		}
 	} else {
 		say("writing %d skill(s)", len(chosen))
@@ -259,9 +272,9 @@ func run(ctx context.Context, args []string) error {
 			}
 		}
 	}
-	note("browse what was imported:  tapes-skills-demo sessions")
-	note("search it:                 tapes-skills-demo search \"how did I fix auth\"")
-	note("stack is up at %s; `tapes-skills-demo down` removes it and its data", stack.API)
+	note("browse what was imported:  tapes-test sessions")
+	note("search it:                 tapes-test search \"how did I fix auth\"")
+	note("stack is up at %s; `tapes-test down` removes it and its data", stack.API)
 	return nil
 }
 
@@ -419,12 +432,12 @@ func check(ctx context.Context, args []string) error {
 	if client.Ping(ctx) {
 		report("stack", nil, "already up at "+stack.API)
 	} else {
-		report("stack", nil, "not started yet; `tapes-skills-demo` starts it")
+		report("stack", nil, "not started yet; `tapes-test` starts it")
 	}
 	if failed > 0 {
-		return fmt.Errorf("%d check(s) failed; fix those and run `tapes-skills-demo check` again", failed)
+		return fmt.Errorf("%d check(s) failed; fix those and run `tapes-test check` again", failed)
 	}
-	fmt.Println(outUI.okTag.Render("ready:") + " run `tapes-skills-demo`")
+	fmt.Println(outUI.okTag.Render("ready:") + " run `tapes-test`")
 	return nil
 }
 
@@ -437,7 +450,7 @@ func sessions(ctx context.Context, args []string) error {
 	client := tapes.New(stack.API, stack.Ingest)
 	rows, err := client.Sessions(ctx, 0)
 	if err != nil {
-		return fmt.Errorf("cannot read %s (is the stack up? run tapes-skills-demo first): %w", client.API, err)
+		return fmt.Errorf("cannot read %s (is the stack up? run tapes-test first): %w", client.API, err)
 	}
 	if len(rows) == 0 {
 		fmt.Println("no sessions imported yet")
@@ -608,7 +621,7 @@ func waitForQueue(ctx context.Context, st *stack.Stack) error {
 		case err != nil:
 			failures++
 			if failures == maxFailures {
-				return fmt.Errorf("lost contact with the tapes database (%v). Is Docker still running? Nothing is lost: run `tapes-skills-demo` again and it picks up where it stopped", err)
+				return fmt.Errorf("lost contact with the tapes database (%v). Is Docker still running? Nothing is lost: run `tapes-test` again and it picks up where it stopped", err)
 			}
 			n = last
 		default:
@@ -659,4 +672,27 @@ func truncate(s string, n int) string {
 
 func oneLine(s string) string {
 	return strings.Join(strings.Fields(s), " ")
+}
+
+// deckCmd opens the session dashboard over the stack's tapes API.
+func deckCmd(ctx context.Context, args []string) error {
+	fs := newFlags("deck")
+	var o deckui.Options
+	fs.StringVar(&o.APITarget, "api-target", stack.API, "")
+	fs.StringVar(&o.Since, "since", "", "")
+	fs.StringVar(&o.From, "from", "", "")
+	fs.StringVar(&o.To, "to", "", "")
+	fs.StringVar(&o.Sort, "sort", "date", "")
+	fs.StringVar(&o.SortDir, "sort-dir", "desc", "")
+	fs.StringVar(&o.Model, "model", "", "")
+	fs.StringVar(&o.Status, "status", "", "")
+	fs.StringVar(&o.Project, "project", "", "")
+	fs.StringVar(&o.Session, "session", "", "")
+	fs.StringVar(&o.Pricing, "pricing", "", "")
+	fs.UintVar(&o.Refresh, "refresh", 0, "")
+	fs.StringVar(&o.Theme, "theme", "", "")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	return deckui.Run(ctx, o)
 }

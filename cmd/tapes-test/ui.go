@@ -70,5 +70,5 @@ func note(format string, a ...any) {
 
 // fail prints the one-line reason a command stopped.
 func fail(err error) {
-	fmt.Fprintf(os.Stderr, "%s %v\n", errUI.badTag.Render("tapes-skills-demo:"), err)
+	fmt.Fprintf(os.Stderr, "%s %v\n", errUI.badTag.Render("tapes-test:"), err)
 }

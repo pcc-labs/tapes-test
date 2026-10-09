@@ -14,7 +14,7 @@ Codex and Claude Code, either or both, on macOS or Linux.
 | | Why | Get it |
 | --- | --- | --- |
 | **Docker**, running | The local tapes stack: postgres, tapes, and the skills and search cassettes. About 1.2 GB of images, a few GB of data, ports 18081 and 18082 on loopback. | [Docker Desktop](https://docs.docker.com/desktop/) |
-| **Go** 1.24+ | To install with `go install`, and to build from source. Skip it if you take the prebuilt binary below. | [go.dev/dl](https://go.dev/dl/) |
+| **Go** 1.26+ | To install with `go install`, and to build from source. Skip it if you take the prebuilt binary below. | [go.dev/dl](https://go.dev/dl/) |
 | **An OpenAI key** | Writes the skills and embeds sessions for search. Skip it with `--ollama`. | [platform.openai.com/api-keys](https://platform.openai.com/api-keys) |
 | **Codex history** | One of the two is enough. Read from `~/.codex/sessions`, or `CODEX_HOME`. | [Codex CLI](https://developers.openai.com/codex/cli) |
 | **Claude Code history** | The other. Read from `~/.claude/projects`, or `CLAUDE_CONFIG_DIR`. | [Claude Code](https://claude.com/claude-code) |
@@ -27,9 +27,9 @@ Windows works through [WSL](https://learn.microsoft.com/windows/wsl/install).
 Start Docker Desktop, then:
 
 ```bash
-go install github.com/pcc-labs/tapes-test/cmd/tapes-skills-demo@latest
+go install github.com/pcc-labs/tapes-test/cmd/tapes-test@latest
 export OPENAI_API_KEY=sk-...   # or put it in a .env in the current directory
-tapes-skills-demo check
+tapes-test check
 ```
 
 Without Go, take the prebuilt binary instead, which needs nothing installed:
@@ -45,7 +45,7 @@ Claude Code separately, and only wants one of them.
 ## Run
 
 ```bash
-tapes-skills-demo
+tapes-test
 ```
 
 It reads your last 30 days of Codex and Claude Code sessions, whichever of
@@ -86,8 +86,8 @@ Under that, sessions that did the same kind of work, and work a skill you
 already have covers. You pick which to write; Enter takes them all.
 
 ```bash
-tapes-skills-demo suggest    # show it again without writing anything
-tapes-skills-demo skill 1    # write suggestion 1
+tapes-test suggest    # show it again without writing anything
+tapes-test skill 1    # write suggestion 1
 ```
 
 Skills land in `tapes-skills/`. Copy the ones you want into `.claude/skills/`
@@ -96,8 +96,8 @@ or paste them wherever you keep skills. Nothing is installed for you.
 ### Anything you remember
 
 ```bash
-tapes-skills-demo search "how I fixed auth"
-tapes-skills-demo skill $(tapes-skills-demo search -q "how I fixed auth")
+tapes-test search "how I fixed auth"
+tapes-test skill $(tapes-test search -q "how I fixed auth")
 ```
 
 `search` ranks single turns across every imported session. `-q` prints only
@@ -108,8 +108,22 @@ focused sessions make better skills than one long thread.
 Search fills in the background. Right after the first run, give it a minute.
 
 ```bash
-tapes-skills-demo sessions   # what was imported
+tapes-test sessions   # what was imported
 ```
+
+## Browse it
+
+```bash
+tapes-test deck
+```
+
+A terminal dashboard over everything imported: spend, tokens, and time by
+model, a sortable session list, and each session turn by turn. `enter`
+drills in, `h` backs out, `p` changes the period, `q` quits. `--since 7d`,
+`--project NAME`, and `--session ID` narrow it from the start.
+
+It reads the stack on 127.0.0.1:18081, so run `tapes-test` first. Any other
+tapes API works with `--api-target URL`.
 
 ## Or hand it to your agent
 
@@ -117,10 +131,10 @@ This repo ships [SKILL.md](SKILL.md), so your agent can run the whole thing
 without you narrating it:
 
 ```bash
-git clone https://github.com/pcc-labs/tapes-test ~/.claude/skills/tapes-skills-demo
+git clone https://github.com/pcc-labs/tapes-test ~/.claude/skills/tapes-test
 ```
 
-Then ask for it by name: *"use the tapes-skills-demo skill and tell me what
+Then ask for it by name: *"use the tapes-test skill and tell me what
 my agent history says about how I work."* Codex reads the same file; put it
 wherever that agent keeps skills.
 
@@ -141,25 +155,25 @@ Every failure prints one line saying what to do. The ones a first run meets:
 | `docker is installed but not running` | Start Docker Desktop and wait for it to finish starting. |
 | `OpenAI rejected OPENAI_API_KEY` | Fix the key. One exported in the shell wins over `.env`. |
 | `no agent history found …` | Pass `--codex-root DIR` or `--claude-root DIR`. `CODEX_HOME` and `CLAUDE_CONFIG_DIR` are honoured. |
-| `ports 18081/18082 are taken` | `tapes-skills-demo down`, or stop what is listening there. |
+| `ports 18081/18082 are taken` | `tapes-test down`, or stop what is listening there. |
 | `stale login for public.ecr.aws` | `docker logout public.ecr.aws` |
 | `command not found` after installing | The installer printed the PATH line to add. Open a new terminal after adding it. |
 | `no hits` from `search` | Embeddings fill in the background. Wait a minute. |
 | `lost contact with the tapes database` | Check Docker is still running, then run it again. |
 
-Anything else: `tapes-skills-demo down` and run it again. That only deletes
+Anything else: `tapes-test down` and run it again. That only deletes
 this tool's containers and data, never the history it read.
 
 ## Options
 
 ```bash
-tapes-skills-demo --since-days 90    # default 30
-tapes-skills-demo --out DIR          # default tapes-skills
-tapes-skills-demo --harness claude   # one harness; default is both
-tapes-skills-demo --codex-root DIR   # default ~/.codex/sessions
-tapes-skills-demo --claude-root DIR  # default ~/.claude/projects
-tapes-skills-demo --yes              # write every suggestion without asking
-tapes-skills-demo down               # remove containers and data
+tapes-test --since-days 90    # default 30
+tapes-test --out DIR          # default tapes-skills
+tapes-test --harness claude   # one harness; default is both
+tapes-test --codex-root DIR   # default ~/.codex/sessions
+tapes-test --claude-root DIR  # default ~/.claude/projects
+tapes-test --yes              # write every suggestion without asking
+tapes-test down               # remove containers and data
 ```
 
 Safe to re-run.
@@ -167,7 +181,7 @@ Safe to re-run.
 ## Without OpenAI
 
 ```bash
-tapes-skills-demo --ollama
+tapes-test --ollama
 ```
 
 Nothing leaves your laptop at all. It uses the [Ollama](https://ollama.com/download)
@@ -181,7 +195,7 @@ runs it fast enough. On a Mac, install Ollama itself: the Docker one has no
 GPU.
 
 One stack uses one provider, because the two embed differently. To switch,
-run `tapes-skills-demo down` first.
+run `tapes-test down` first.
 
 ## Privacy
 
