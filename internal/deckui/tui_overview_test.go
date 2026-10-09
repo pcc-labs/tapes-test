@@ -16,12 +16,12 @@ import (
 func sessionListFixture() []deck.SessionSummary {
 	labels := []string{
 		"Task: Review the current working tree after refactoring the deck",
-		"Split paper-console and paper-chat into separate projects",
-		"Add paper pull up skill",
+		"Split the dashboard and the importer into separate packages",
+		"Add a search skill",
 		"Checkout and pull main branch",
-		"Block /demos and /cline in robots.txt",
+		"Block /drafts and /tmp in robots.txt",
 		"Capture Claude fixture recordings for tapes so the deck has data",
-		"Find Jason's API sorting sessions",
+		"Find the API sorting sessions",
 	}
 	start := time.Date(2026, 7, 28, 9, 0, 0, 0, time.UTC)
 
@@ -31,7 +31,7 @@ func sessionListFixture() []deck.SessionSummary {
 			ID:           strings.Repeat("a", 8),
 			Label:        label,
 			Model:        "claude-opus-5",
-			Project:      "paper-forest",
+			Project:      "notes",
 			Status:       "completed",
 			StartTime:    start.Add(time.Duration(i) * time.Hour),
 			Duration:     time.Duration(i+1) * time.Minute,
