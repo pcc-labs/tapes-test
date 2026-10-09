@@ -27,7 +27,7 @@ theirs to fix, and a run without them wastes several minutes.
 Not installed yet:
 
 ```bash
-go install github.com/pcc-labs/tapes-test/cmd/tapes-test@latest
+GOEXPERIMENT=jsonv2 go install github.com/pcc-labs/tapes-test/cmd/tapes-test@latest
 # no Go on the machine:
 curl -fsSL https://raw.githubusercontent.com/pcc-labs/tapes-test/main/install.sh | sh
 ```
