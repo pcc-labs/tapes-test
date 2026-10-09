@@ -71,6 +71,7 @@ tapes-test sessions                     # what was imported
 tapes-test search "how I fixed auth"    # semantic search over the sessions
 tapes-test skill $(tapes-test search -q "how I fixed auth")
 tapes-test deck                         # terminal dashboard over the sessions
+tapes-test spend                        # frontier spend that could move to a cheaper model
 ```
 
 `deck` takes over the terminal until the user presses `q`, so do not run it

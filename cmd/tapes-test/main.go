@@ -10,6 +10,7 @@
 //	tapes-test sessions         what was imported
 //	tapes-test search "query"   semantic search over the imported work
 //	tapes-test suggest          show the clusters without generating
+//	tapes-test spend            frontier spend that could move to cheaper models
 //	tapes-test down             stop the stack and delete its data
 //
 // Needs Docker and an OpenAI key (OPENAI_API_KEY, or a .env in the current
@@ -50,6 +51,7 @@ commands:
   suggest    show what your sessions look like and the skills they could be
   skill      write a skill: by suggestion number, or from session ids
   deck       browse imported sessions in a terminal dashboard
+  spend      RoutableSpend: frontier spend that could move to cheaper models
   down       stop the stack and delete its data
   version    print the version
 
@@ -91,6 +93,12 @@ deck flags:
   --theme NAME     dark or light (default: follow the terminal)
   --api-target URL another tapes API (default the stack, http://127.0.0.1:18081)
 
+spend flags:
+  --since-days N      calls from the last N days (default 0 = all)
+  --small-output N    most output tokens for a read-only call to route (default 400)
+  --pricing FILE      JSON price overrides per model, as for deck
+  --json              machine-readable output
+
   tapes-test skill 1 3
   tapes-test skill $(tapes-test search -q "how I fixed auth")
 `
@@ -123,6 +131,8 @@ func main() {
 		err = check(ctx, args)
 	case "deck":
 		err = deckCmd(ctx, args)
+	case "spend":
+		err = spendCmd(ctx, args)
 	case "down":
 		err = down(ctx)
 	case "version", "--version":
