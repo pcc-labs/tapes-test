@@ -55,11 +55,7 @@ func New(ollama bool) (*Stack, error) {
 	if err := Preflight(); err != nil {
 		return nil, err
 	}
-	dir, err := os.UserCacheDir()
-	if err != nil {
-		dir = os.TempDir()
-	}
-	dir = filepath.Join(dir, "tapes-skills-demo")
+	dir := cacheDir()
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, err
 	}
@@ -104,7 +100,7 @@ func Preflight() error {
 func explain(output string) string {
 	switch {
 	case strings.Contains(output, "port is already allocated"), strings.Contains(output, "address already in use"):
-		return "ports 18081/18082 are taken by something else. If it is an old copy of this stack, run `tapes-skills-demo down`; otherwise stop whatever is listening there"
+		return "ports 18081/18082 are taken by something else. If it is an old copy of this stack, run `tapes-test down`; otherwise stop whatever is listening there"
 	case strings.Contains(output, "authorization token has expired"), strings.Contains(output, "public.ecr.aws") && strings.Contains(output, "denied"):
 		return "Docker has a stale login for public.ecr.aws. Run `docker logout public.ecr.aws` and try again"
 	case strings.Contains(output, "no space left on device"):
@@ -118,12 +114,23 @@ func explain(output string) string {
 // OllamaMode is true when the stack on this machine was started with
 // --ollama, so a model call outside the cassettes should go there too.
 func OllamaMode() bool {
-	dir, err := os.UserCacheDir()
-	if err != nil {
-		return false
-	}
-	mode, err := os.ReadFile(filepath.Join(dir, "tapes-skills-demo", "mode"))
+	mode, err := os.ReadFile(filepath.Join(cacheDir(), "mode"))
 	return err == nil && strings.TrimSpace(string(mode)) == "ollama"
+}
+
+// cacheDir is where the compose files and the mode marker live. The tool
+// was called tapes-skills-demo before; a stack started under that name
+// keeps its mode by moving the old directory over on first use.
+func cacheDir() string {
+	base, err := os.UserCacheDir()
+	if err != nil {
+		base = os.TempDir()
+	}
+	dir := filepath.Join(base, "tapes-test")
+	if _, err := os.Stat(dir); os.IsNotExist(err) {
+		_ = os.Rename(filepath.Join(base, "tapes-skills-demo"), dir)
+	}
+	return dir
 }
 
 func hostOllamaUp() bool {
@@ -193,7 +200,7 @@ func (s *Stack) Up(ctx context.Context) error {
 		prev = []byte("openai") // a stack from before --ollama existed
 	}
 	if len(prev) > 0 && string(prev) != s.mode() {
-		return fmt.Errorf("this stack was built with %s; run `tapes-skills-demo down` before switching to %s", prev, s.mode())
+		return fmt.Errorf("this stack was built with %s; run `tapes-test down` before switching to %s", prev, s.mode())
 	}
 	cmd := s.cmd(ctx, "up", "-d", "--quiet-pull")
 	var buf bytes.Buffer

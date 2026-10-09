@@ -1,5 +1,5 @@
 #!/bin/sh
-# Installs the latest tapes-skills-demo release. No Go needed.
+# Installs the latest tapes-test release. No Go needed.
 #
 #   curl -fsSL https://raw.githubusercontent.com/pcc-labs/tapes-test/main/install.sh | sh
 #
@@ -19,7 +19,7 @@ case "$os" in
   *) echo "install: unsupported OS: $os (macOS and Linux only; on Windows use WSL)" >&2; exit 1 ;;
 esac
 
-name="tapes-skills-demo-$os-$arch"
+name="tapes-test-$os-$arch"
 url="https://github.com/$repo/releases/latest/download/$name"
 dir="${TAPES_INSTALL_DIR:-$HOME/.local/bin}"
 tmp=$(mktemp -d)
@@ -35,15 +35,15 @@ else
 fi
 
 mkdir -p "$dir"
-mv "$tmp/$name" "$dir/tapes-skills-demo"
-chmod +x "$dir/tapes-skills-demo"
-echo "installed $dir/tapes-skills-demo"
+mv "$tmp/$name" "$dir/tapes-test"
+chmod +x "$dir/tapes-test"
+echo "installed $dir/tapes-test"
 
 case ":$PATH:" in
-  *":$dir:"*) echo "next: tapes-skills-demo check" ;;
+  *":$dir:"*) echo "next: tapes-test check" ;;
   *)
     echo "$dir is not on your PATH. Add it, then open a new terminal:"
     echo "  echo 'export PATH=\"$dir:\$PATH\"' >> ~/.zshrc"
-    echo "or run it by its full path: $dir/tapes-skills-demo check"
+    echo "or run it by its full path: $dir/tapes-test check"
     ;;
 esac
