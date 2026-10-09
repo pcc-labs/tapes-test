@@ -15,7 +15,7 @@ Codex and Claude Code, either or both, on macOS or Linux.
 | | Why | Get it |
 | --- | --- | --- |
 | **Docker**, running | The local tapes stack: postgres, tapes, and the skills and search cassettes. About 1.2 GB of images, a few GB of data, ports 18081 and 18082 on loopback. | [Docker Desktop](https://docs.docker.com/desktop/) |
-| **Go** 1.26+ | To install with `go install`, and to build from source. Skip it if you take the prebuilt binary below. | [go.dev/dl](https://go.dev/dl/) |
+| **Go** 1.26+ | To install with `go install`, and to build from source, both with `GOEXPERIMENT=jsonv2`. Skip it if you take the prebuilt binary below. | [go.dev/dl](https://go.dev/dl/) |
 | **An OpenAI key** | Writes the skills and embeds sessions for search. Skip it with `--ollama`. | [platform.openai.com/api-keys](https://platform.openai.com/api-keys) |
 | **Codex history** | One of the two is enough. Read from `~/.codex/sessions`, or `CODEX_HOME`. | [Codex CLI](https://developers.openai.com/codex/cli) |
 | **Claude Code history** | The other. Read from `~/.claude/projects`, or `CLAUDE_CONFIG_DIR`. | [Claude Code](https://claude.com/claude-code) |
@@ -28,7 +28,7 @@ Windows works through [WSL](https://learn.microsoft.com/windows/wsl/install).
 Start Docker Desktop, then:
 
 ```bash
-go install github.com/pcc-labs/tapes-test/cmd/tapes-test@latest
+GOEXPERIMENT=jsonv2 go install github.com/pcc-labs/tapes-test/cmd/tapes-test@latest
 export OPENAI_API_KEY=sk-...   # or put it in a .env in the current directory
 tapes-test check
 ```
