@@ -129,13 +129,13 @@ It reads the stack on 127.0.0.1:18081, so run `tapes-test` first. Any other
 tapes API works with `--api-target URL`.
 
 Reading the stack, the deck also shows a **ROUTABLE** tile: the
-[RoutableSpend](#what-could-run-on-a-cheaper-model) of the sessions on
+[RoutableSpend](#what-could-run-on-a-more-efficient-model) of the sessions on
 screen, as dollars and a share of their frontier spend. It follows the
 period and filters, and on a session page it counts that session's
 routable calls. Another `--api-target` has no database to compute it from,
 so the tile is left out there.
 
-## What could run on a cheaper model
+## What could run on a more efficient model
 
 ```bash
 tapes-test spend
@@ -143,7 +143,7 @@ tapes-test spend --since-days 30 --json
 ```
 
 RoutableSpend: the dollars of frontier-model spend (Fable 5 and 5.1, Opus 5
-and 5.5) that could move to a cheaper model without hurting the outcome, as
+and 5.5) that could move to a more efficient model without hurting the outcome, as
 defined in [pcc-labs/derived-metrics#1](https://github.com/pcc-labs/derived-metrics/issues/1).
 Two of its three signals are computed:
 
@@ -158,7 +158,7 @@ Each token type is priced at its own rate. Caches are per model, so the
 first routed call in a thread pays the target's cache-write rate on its
 whole input, and a call only counts when it still saves money after that.
 On a heavily cached session most candidates fail that test, which the
-report says. Signal 2, recurring task clusters proven on cheaper models, is
+report says. Signal 2, recurring task clusters proven on more efficient models, is
 not computed yet.
 
 Prices are list prices as of 2026-10-09; `--pricing FILE` overrides them

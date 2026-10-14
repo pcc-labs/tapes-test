@@ -10,7 +10,7 @@
 //	tapes-test sessions         what was imported
 //	tapes-test search "query"   semantic search over the imported work
 //	tapes-test suggest          show the clusters without generating
-//	tapes-test spend            frontier spend that could move to cheaper models
+//	tapes-test spend            frontier spend that could move to more efficient models
 //	tapes-test down             stop the stack and delete its data
 //
 // Needs Docker and an OpenAI key (OPENAI_API_KEY, or a .env in the current
@@ -52,7 +52,7 @@ commands:
   suggest    show what your sessions look like and the skills they could be
   skill      write a skill: by suggestion number, or from session ids
   deck       browse imported sessions in a terminal dashboard
-  spend      RoutableSpend: frontier spend that could move to cheaper models
+  spend      RoutableSpend: frontier spend that could move to more efficient models
   down       stop the stack and delete its data
   version    print the version
 

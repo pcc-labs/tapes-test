@@ -15,7 +15,7 @@ import (
 )
 
 // spendCmd prints RoutableSpend over the imported sessions: the frontier
-// spend that could move to a cheaper model. See internal/spend.
+// spend that could move to a more efficient model. See internal/spend.
 func spendCmd(ctx context.Context, args []string) error {
 	fs := newFlags("spend")
 	sinceDays := fs.Int("since-days", 0, "")
